@@ -1,24 +1,53 @@
 # AFITStudentLife
 
-A mobile-first static student platform built with HTML, CSS, vanilla JavaScript, Firebase Authentication, and Firebase Realtime Database. GitHub Pages serves the frontend; there is no application server or build step.
+AFITStudentLife is a lightweight student platform for AFIT. The frontend is plain HTML, CSS, and vanilla JavaScript served from GitHub Pages. An Express API on Render verifies Firebase Authentication ID tokens and accesses Firebase Realtime Database using a server-only Firebase Admin service account.
 
-## Firebase setup required
+## Current deployment configuration
 
-The Firebase web app configuration supplied for this repository did not include a Realtime Database URL. The standard project endpoints could not be verified, so `js/firebase-config.js` intentionally leaves `databaseURL` empty instead of sending private data to a guessed endpoint.
+The Firebase web-app config is in `js/firebase-config.js`; its API key is public client configuration, not an Admin credential. The Render service URL is intentionally blank in `js/app-config.js` until the API is deployed. No Realtime Database URL or service-account private key was provided, and neither is guessed or committed.
 
-1. In the Firebase Console for `student-life-643be`, enable **Authentication → Sign-in method → Email/Password**.
-2. Create or open **Realtime Database**. Copy its exact URL from the console (it can include a region in the hostname) into `databaseURL` in `js/firebase-config.js`.
-3. Publish the rules in `firebase.rules.json` from **Realtime Database → Rules**.
-4. In **Authentication → Settings → Authorized domains**, add the GitHub Pages host, such as `daviddchucks-hash.github.io`.
+## Set up Firebase
 
-The app writes personal information only beneath `users/{uid}/...`. The included rules deny access by default and allow each signed-in user to read and write only their own subtree. The public `academicContent`, `formulas`, `courses`, and `departments` branches are readable but not writable from the app. No large academic datasets are bundled in the frontend.
+1. In Firebase Console for project `student-life-643be`, enable **Authentication → Sign-in method → Email/Password**.
+2. Create/open **Realtime Database** and copy its exact HTTPS URL.
+3. Apply `firebase.rules.json` under **Realtime Database → Rules**.
+4. Add `daviddchucks-hash.github.io` under **Authentication → Settings → Authorized domains**.
+5. Create a Firebase service-account key in **Project settings → Service accounts**. Keep the downloaded key private; do not add it to this repository.
 
-## GitHub Pages
+The public web-app configuration is used only for client-side Firebase Authentication. The frontend never connects directly to Realtime Database. The Express API verifies each Firebase ID token, derives the UID from that verified token, and uses only allowlisted user-data paths. The Realtime Database rules deny direct client access to all `users` data (the Admin SDK on Render bypasses client rules); public content branches are read-only. Do not accept a UID from the browser as an authorization decision.
 
-In the repository settings, open **Pages**, choose **Deploy from a branch**, select `main` and the `/ (root)` folder, then save. The site uses relative asset and page paths and does not need a server-side router or build process.
+## Deploy the API to Render
 
-## Included tools
+1. In Render, create a **Blueprint** from this GitHub repository and use `render.yaml`.
+2. Set the prompted Render environment values:
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete Firebase service-account JSON, stored only in Render.
+   - `FIREBASE_DATABASE_URL`: the exact Realtime Database URL copied from Firebase Console.
+   - `FRONTEND_ORIGINS`: `https://daviddchucks-hash.github.io` (already specified in the Blueprint; add a local development origin only when needed).
+3. After the Render web service deploys, copy its public URL into `API_BASE_URL` in `js/app-config.js`, without a trailing slash, and push that frontend change.
+4. The Render health check is `GET /api/health`. Authenticated routes require `Authorization: Bearer <Firebase ID token>`.
 
-GPA, CGPA, semester weighted-average, grade, and course-unit calculators; registration planner; personal courses; personal timetable and generated weekly view; exam organizer and countdown; assignment and academic deadline trackers; semester planner; study timetable generator; and study session tracker.
+The Blueprint uses Render's free plan for initial setup; free services may sleep when idle. Choose an always-on plan in Render if the live platform needs it.
 
-Calculator defaults use a common 5-point grade-point input scale and indicative score boundaries. Students should verify their programme's grading scale with their department.
+## Deploy the frontend to GitHub Pages
+
+In repository **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/ (root)`, and save. The expected site URL is `https://daviddchucks-hash.github.io/Studentlife/`. All static links are relative and there is no frontend build step.
+
+## API and data layout
+
+- `GET /api/me` — verified signed-in user profile.
+- `GET /api/dashboard` — per-user courses, upcoming assignments/deadlines/exams, and real study/course summaries.
+- `GET|POST /api/records/:type` — list or create a validated allowlisted record.
+- `DELETE /api/records/:type/:id` — remove a record belonging to the verified user.
+- `GET /api/content/:section` — public `academicContent`, `formulas`, `courses`, or `departments`.
+
+Private records live under `users/{uid}/courses/...`, `timetable`, `exams`, `assignments`, `deadlines`, `semesterPlan`, `studyPlans`, and `studySessions`. Database rules deny access by default and additionally restrict direct authenticated access to each user's own subtree; the Admin SDK is used only on Render.
+
+## Academic tools
+
+The dashboard includes GPA, CGPA, semester weighted-average, grade, and course-unit calculators; registration planner; personal course list; personal timetable and generated weekly view; exam organizer/countdown; assignment and academic deadline trackers; semester planner; study timetable generator; and study session tracker. Calculations run in the browser without database requests. Personal records use the authenticated Render API.
+
+The calculators use a common 5-point grade-point input scale and indicative score boundaries. Students should verify their programme's grading scale with their department.
+
+## Local checks
+
+Run `npm test` to exercise API input validation. To start the API locally, set the same Firebase Admin and database environment variables used on Render, then run `npm start`. Never commit `.env` files or service-account JSON.

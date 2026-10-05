@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="description" content="Your personal AFITStudentLife academic dashboard.">
+  <title>Dashboard — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header">
+    <a class="brand" href="./index.html"><span class="brand-mark">A</span><span>AFIT<span class="brand-light">StudentLife</span></span></a>
+    <div class="account-actions"><span class="account-name" id="student-name">Loading your account…</span><button id="logout-button" class="button button-quiet button-small" type="button">Sign out</button></div>
+  </header>
+  <main class="dashboard-wrap">
+    <section class="welcome-row">
+      <div><p class="eyebrow">Your student space</p><h1 id="welcome-title">Your semester, organized.</h1><p class="muted">Choose a tool to plan, calculate, or keep track of your academic work.</p></div>
+      <div class="privacy-note"><span class="privacy-dot"></span><span>Personal tools are saved to your account</span></div>
+    </section>
+    <div class="setup-notice" id="setup-notice" hidden role="status"></div>
+    <section class="dashboard-overview" aria-label="Your academic overview">
+      <div class="overview-stats" id="overview-stats" aria-live="polite">
+        <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
+        <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
+        <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
+      </div>
+      <div class="overview-grid">
+        <section class="overview-panel"><p class="eyebrow">Current courses</p><div id="current-courses" class="summary-list"><p class="muted">Loading…</p></div></section>
+        <section class="overview-panel"><p class="eyebrow">Assignments</p><div id="upcoming-assignments" class="summary-list"><p class="muted">Loading…</p></div></section>
+        <section class="overview-panel"><p class="eyebrow">Academic deadlines</p><div id="upcoming-deadlines" class="summary-list"><p class="muted">Loading…</p></div></section>
+        <section class="overview-panel"><p class="eyebrow">Exam countdown</p><div id="exam-countdown" class="summary-list"><p class="muted">Loading…</p></div></section>
+      </div>
+    </section>
+    <section class="dashboard-section">
+      <div class="section-heading compact"><div><p class="eyebrow">16 tools · four areas</p><h2>Academic tools</h2></div></div>
+      <div class="tool-filters" id="tool-filters" aria-label="Filter academic tools"></div>
+      <div class="tool-grid" id="tool-grid" aria-live="polite">
+        <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
+        <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
+        <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
+        <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
+      </div>
+    </section>
+    <section class="dashboard-lower">
+      <div class="lower-panel"><div class="panel-heading"><div><p class="eyebrow">Recently used</p><h2>Pick up quickly</h2></div></div><div id="recent-tools" class="recent-list"><p class="muted">Your recent tools will appear here.</p></div></div>
+      <div class="lower-panel info-panel"><p class="eyebrow">A quick note</p><h2>Check your department’s grading scale.</h2><p class="muted">Calculator defaults follow a common 5-point scale. Confirm your programme’s current grading rules before relying on a result.</p><p class="fine-print">Your course, timetable, and deadline entries are private to your signed-in account.</p></div>
+    </section>
+  </main>
+  <dialog class="tool-dialog" id="tool-dialog" aria-labelledby="tool-title">
+    <div class="dialog-head"><div><p class="eyebrow" id="tool-category">Academic tool</p><h2 id="tool-title">Tool</h2></div><button type="button" class="icon-button" id="close-dialog" aria-label="Close tool">×</button></div>
+    <div id="tool-body" class="dialog-body"></div>
+  </dialog>
+  <footer class="site-footer app-footer"><a href="./index.html">AFITStudentLife</a><span>Tools for your academic routine.</span></footer>
+  <script type="module" src="./js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Create account — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+</head>
+<body class="auth-page">
+  <header class="site-header"><a class="brand" href="./index.html"><span class="brand-mark">A</span><span>AFIT<span class="brand-light">StudentLife</span></span></a><a class="text-link" href="./index.html">Back to home</a></header>
+  <main class="auth-layout">
+    <section class="auth-card">
+      <p class="eyebrow">Your student toolkit starts here</p>
+      <h1>Create your account</h1>
+      <p class="muted">Your password is handled securely by Firebase Authentication.</p>
+      <form id="auth-form" class="form-stack" novalidate>
+        <label>Your name<input name="name" type="text" autocomplete="name" required maxlength="80" placeholder="How should we address you?"></label>
+        <label>Email address<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters"></label>
+        <label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Enter it again"></label>
+        <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+        <button class="button button-primary button-full" type="submit">Create account</button>
+      </form>
+      <p class="auth-switch">Already registered? <a href="./login.html">Sign in</a></p>
+    </section>
+  </main>
+  <script type="module" src="./js/auth.js"></script>
+</body>
+</html>
