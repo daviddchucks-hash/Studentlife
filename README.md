@@ -4,7 +4,7 @@ AFITStudentLife is a lightweight student platform for AFIT. The frontend is plai
 
 ## Current deployment configuration
 
-The Firebase web-app config is in `js/firebase-config.js`; its API key is public client configuration, not an Admin credential. The Render service URL is intentionally blank in `js/app-config.js` until the API is deployed. No Realtime Database URL or service-account private key was provided, and neither is guessed or committed.
+The Firebase web-app config is in `js/firebase-config.js`; its API key is public client configuration, not an Admin credential. The production Render API URL is configured in `js/app-config.js` as `https://studentlife-r8k1.onrender.com`. No Realtime Database URL or service-account private key was provided, and neither is guessed or committed.
 
 ## Set up Firebase
 
@@ -23,7 +23,7 @@ The public web-app configuration is used only for client-side Firebase Authentic
    - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete Firebase service-account JSON, stored only in Render.
    - `FIREBASE_DATABASE_URL`: the exact Realtime Database URL copied from Firebase Console.
    - `FRONTEND_ORIGINS`: `https://daviddchucks-hash.github.io` (already specified in the Blueprint; add a local development origin only when needed).
-3. After the Render web service deploys, copy its public URL into `API_BASE_URL` in `js/app-config.js`, without a trailing slash, and push that frontend change.
+3. The current Render URL is already set as `API_BASE_URL` in `js/app-config.js`. If the service URL changes, update that public URL (without a trailing slash) and push the frontend change.
 4. The Render health check is `GET /api/health`. Authenticated routes require `Authorization: Bearer <Firebase ID token>`.
 
 The Blueprint uses Render's free plan for initial setup; free services may sleep when idle. Choose an always-on plan in Render if the live platform needs it.

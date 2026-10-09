@@ -1,3 +1,2 @@
-// Set this to the public URL of the Render Web Service, without a trailing slash.
-// This URL is public configuration; never put secrets or service-account keys here.
-export const API_BASE_URL = "";
+// Public Render API URL; never put secrets or service-account keys here.
+export const API_BASE_URL = "https://studentlife-r8k1.onrender.com";
