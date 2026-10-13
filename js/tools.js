@@ -1544,6 +1544,37 @@ async function renderTool(tool) {
   }
 
   if (tool.id === "quadratic-solver") {
+    body.innerHTML = `
+      <p class="tool-intro">Solve <strong>ax² + bx + c = 0</strong> for real or complex roots.</p>
+      <form class="tool-form" id="quadratic-form">
+        <div class="form-row">
+          <label class="field">Coefficient a<input name="a" type="number" step="any" required></label>
+          <label class="field">Coefficient b<input name="b" type="number" step="any" required></label>
+        </div>
+        <label class="field">Coefficient c<input name="c" type="number" step="any" required></label>
+        <button class="button button-primary" type="submit">Solve equation</button>
+        <div class="tool-output" id="quadratic-output" aria-live="polite"></div>
+      </form>
+    `;
+    body.querySelector("#quadratic-form").onsubmit = (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const output = form.querySelector("#quadratic-output");
+      try {
+        const result = solveQuadratic(form.elements.a.value, form.elements.b.value, form.elements.c.value);
+        output.innerHTML = `
+          <div class="result-box">
+            <strong>${escapeHtml(result.type)}</strong>
+            <p>Discriminant: ${escapeHtml(result.discriminant)}</p>
+            <p>${result.roots.map(escapeHtml).join("<br>")}</p>
+          </div>
+        `;
+      } catch (error) {
+        output.innerHTML = showError(error.message);
+      }
+    };
+    return;
+  }
 
   // Formula Library View
   if (tool.id === "formula-library") {

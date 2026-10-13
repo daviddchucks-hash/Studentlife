@@ -2,6 +2,21 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const { readdirSync, readFileSync } = require("node:fs");
+const path = require("node:path");
+
+test("all browser JavaScript modules parse as ES modules", () => {
+  const jsDirectory = path.join(__dirname, "..", "js");
+  const moduleFiles = readdirSync(jsDirectory).filter((file) => file.endsWith(".js"));
+  for (const file of moduleFiles) {
+    const source = readFileSync(path.join(jsDirectory, file), "utf8");
+    assert.doesNotThrow(
+      () => execFileSync(process.execPath, ["--input-type=module", "--check"], { input: source, stdio: ["pipe", "ignore", "pipe"] }),
+      `${file} must parse as a browser ES module`
+    );
+  }
+});
 
 test("General calculators evaluate accurately", async () => {
   const { evaluateScientific, calculatePercentage, calculateFraction, convertUnit, solveLinearEquation, calculateMatrix } = await import("../js/calculators.js");

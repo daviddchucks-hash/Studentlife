@@ -50,4 +50,4 @@ The calculators use a common 5-point grade-point input scale and indicative scor
 
 ## Local checks
 
-Run `npm test` to exercise API input validation. To start the API locally, set the same Firebase Admin and database environment variables used on Render, then run `npm start`. Never commit `.env` files or service-account JSON.
+Run `npm test` to exercise API validation, calculator behavior, and syntax-check every browser JavaScript module as an ES module. To start the API locally, set the same Firebase Admin and database environment variables used on Render, then run `npm start`. Never commit `.env` files or service-account JSON.
