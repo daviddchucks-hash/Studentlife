@@ -24,8 +24,10 @@
 .summary-entry span, .overview-message { margin: 0; color: var(--muted); font-size: 11px; }
 .overview-message { grid-column: 1 / -1; padding: 13px; border: 1px dashed #c5d0d7; border-radius: 8px; }
 .dashboard-section { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
-.section-heading.compact { margin-bottom: 18px; }
+.section-heading.compact { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .section-heading.compact h2 { margin: 0; font-size: 24px; }
+.search-bar-wrap { min-width: 260px; max-width: 380px; flex: 1 1 auto; }
+.search-bar-wrap input[type="search"] { width: 100%; min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: #fff; }
 .tool-filters { display: flex; gap: 8px; overflow-x: auto; padding: 1px 0 14px; scrollbar-width: thin; }
 .filter-button { flex: 0 0 auto; min-height: 35px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: #52616b; font-size: 12px; font-weight: 700; }
 .filter-button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
@@ -90,6 +92,29 @@
 .record-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
 .record-delete { min-height: 31px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: white; color: #6f3c39; font-size: 11px; }
 .record-update { min-height: 31px; padding: 4px 8px; border: 1px solid #cbd8df; border-radius: 6px; background: #f5f9fb; color: var(--blue); font-size: 11px; font-weight: 700; }
+
+/* Section Specific UI Components */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 14px; }
+.module-card { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: #fff; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+.module-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.module-card-title { font-weight: 700; font-size: 15px; margin: 0; color: var(--ink); }
+.module-card-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.module-card-body { font-size: 13px; color: var(--ink); line-height: 1.45; }
+.module-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid #f0f3f5; font-size: 12px; }
+.pill-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #eef3f6; color: var(--blue); }
+.pill-badge.active, .pill-badge.open { background: #e6f7ef; color: #1e754a; }
+.pill-badge.sold, .pill-badge.resolved { background: #f3f4f6; color: #6b7280; }
+.pill-badge.emergency { background: #fde8e8; color: #9b1c1c; font-weight: 800; }
+
+.emergency-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.emergency-card { padding: 16px; border: 1px solid #f8b4b4; border-left: 4px solid var(--danger); border-radius: 8px; background: #fff5f5; }
+.emergency-card h3 { margin: 0 0 6px; font-size: 16px; color: #9b1c1c; }
+.emergency-card p { margin: 0 0 10px; font-size: 13px; color: #5a2020; }
+.emergency-card a.call-btn { display: inline-block; padding: 6px 12px; border-radius: 6px; background: var(--danger); color: white; font-weight: 700; font-size: 12px; }
+
+.admin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
+.admin-tab-btn { padding: 8px 14px; border: none; background: transparent; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.admin-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
 .empty-state, .db-missing { padding: 12px; border: 1px dashed #c5d0d7; border-radius: 8px; color: var(--muted); font-size: 13px; }
 .db-missing { border-style: solid; border-color: #dfc995; background: #fff9ea; color: #624d1f; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
