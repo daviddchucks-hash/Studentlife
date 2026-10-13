@@ -4,7 +4,24 @@ const express = require("express");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
-const { definitions, getDefinition, snapshotToList, validRecordId, validateRecord, validateFormula } = require("./validation");
+const {
+  definitions,
+  getDefinition,
+  snapshotToList,
+  validRecordId,
+  validateRecord,
+  validateFormula,
+  validateProfile,
+  validateDirectoryItem,
+  validateEvent,
+  validateMarketplaceListing,
+  validateJobListing,
+  validateOpportunity,
+  validateLostFoundItem,
+  validateAnnouncement,
+  validateFeedback,
+  validateReport
+} = require("./validation");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 const databaseURL = process.env.FIREBASE_DATABASE_URL;
@@ -153,9 +170,627 @@ app.get("/api/content/:section", async (req, res, next) => {
   }
 });
 
-app.get("/api/me", requireAuth, (req, res) => {
-  const isAdmin = checkIsAdmin(req.user);
-  res.json({ uid: req.user.uid, email: req.user.email || null, name: req.user.name || null, isAdmin });
+app.get("/api/me", requireAuth, async (req, res, next) => {
+  try {
+    const isAdmin = checkIsAdmin(req.user);
+    const profileSnap = await database.ref(`users/${req.user.uid}/profile`).get();
+    const profile = profileSnap.val() || {};
+    res.json({
+      uid: req.user.uid,
+      email: req.user.email || null,
+      name: profile.name || req.user.name || null,
+      isAdmin,
+      profile
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/profile", requireAuth, async (req, res, next) => {
+  try {
+    const profileSnap = await database.ref(`users/${req.user.uid}/profile`).get();
+    res.json({ profile: profileSnap.val() || {} });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/profile", requireAuth, async (req, res, next) => {
+  try {
+    const clean = validateProfile(req.body);
+    const now = Date.now();
+    const profileRef = database.ref(`users/${req.user.uid}/profile`);
+    const existingSnap = await profileRef.get();
+    const existing = existingSnap.val() || {};
+    const saved = { ...clean, updatedAt: now, createdAt: existing.createdAt || now };
+    await profileRef.set(saved);
+    res.json({ profile: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/directory", async (req, res, next) => {
+  try {
+    const snap = await database.ref("directory").get();
+    let items = snapshotToList(snap.val());
+    const { category, search } = req.query;
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q) ||
+        String(i.location || "").toLowerCase().includes(q)
+      );
+    }
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/directory", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const validated = validateDirectoryItem(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: now, updatedAt: now };
+    const ref = await database.ref("directory").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/directory/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    const itemRef = database.ref(`directory/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Directory item not found." });
+    const validated = validateDirectoryItem(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: Number(existing.val().createdAt) || now, updatedAt: now };
+    await itemRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/directory/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    await database.ref(`directory/${req.params.id}`).remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/events", async (req, res, next) => {
+  try {
+    const snap = await database.ref("events").get();
+    let items = snapshotToList(snap.val());
+    const { category, search } = req.query;
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q) ||
+        String(i.location || "").toLowerCase().includes(q) ||
+        String(i.organizer || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/events", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateEvent(req.body);
+    const now = Date.now();
+    const saved = { ...validated, creatorUid: req.user.uid, creatorEmail: req.user.email || null, createdAt: now, updatedAt: now };
+    const ref = await database.ref("events").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/events/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid event ID." });
+    const eventRef = database.ref(`events/${req.params.id}`);
+    const existing = await eventRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Event not found." });
+    const existingVal = existing.val();
+    if (existingVal.creatorUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to edit this event." });
+    }
+    const validated = validateEvent(req.body);
+    const now = Date.now();
+    const saved = { ...existingVal, ...validated, updatedAt: now };
+    await eventRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/events/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid event ID." });
+    const eventRef = database.ref(`events/${req.params.id}`);
+    const existing = await eventRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Event not found." });
+    const existingVal = existing.val();
+    if (existingVal.creatorUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to delete this event." });
+    }
+    await eventRef.remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/marketplace", async (req, res, next) => {
+  try {
+    const snap = await database.ref("marketplace").get();
+    let items = snapshotToList(snap.val());
+    const { category, search, status } = req.query;
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (status) items = items.filter((i) => String(i.status || "active").toLowerCase() === String(status).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/marketplace", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateMarketplaceListing(req.body);
+    const now = Date.now();
+    const saved = { ...validated, sellerUid: req.user.uid, sellerEmail: req.user.email || null, createdAt: now, updatedAt: now };
+    const ref = await database.ref("marketplace").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/marketplace/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid listing ID." });
+    const itemRef = database.ref(`marketplace/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.sellerUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to edit this listing." });
+    }
+    const validated = validateMarketplaceListing(req.body);
+    const now = Date.now();
+    const saved = { ...existingVal, ...validated, updatedAt: now };
+    await itemRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/marketplace/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid listing ID." });
+    const itemRef = database.ref(`marketplace/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.sellerUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to delete this listing." });
+    }
+    await itemRef.remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/jobs", async (req, res, next) => {
+  try {
+    const snap = await database.ref("jobs").get();
+    let items = snapshotToList(snap.val());
+    const { type, search } = req.query;
+    if (type) items = items.filter((i) => String(i.type || "").toLowerCase() === String(type).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/jobs", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateJobListing(req.body);
+    const now = Date.now();
+    const saved = { ...validated, postedByUid: req.user.uid, postedByEmail: req.user.email || null, createdAt: now, updatedAt: now };
+    const ref = await database.ref("jobs").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/jobs/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid job ID." });
+    const jobRef = database.ref(`jobs/${req.params.id}`);
+    const existing = await jobRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Job listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.postedByUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to edit this job." });
+    }
+    const validated = validateJobListing(req.body);
+    const now = Date.now();
+    const saved = { ...existingVal, ...validated, updatedAt: now };
+    await jobRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/jobs/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid job ID." });
+    const jobRef = database.ref(`jobs/${req.params.id}`);
+    const existing = await jobRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Job listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.postedByUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to delete this job." });
+    }
+    await jobRef.remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/opportunities", async (req, res, next) => {
+  try {
+    const snap = await database.ref("opportunities").get();
+    let items = snapshotToList(snap.val());
+    const { category, search } = req.query;
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => String(a.deadline || "").localeCompare(String(b.deadline || "")));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/opportunities", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateOpportunity(req.body);
+    const now = Date.now();
+    const saved = { ...validated, postedByUid: req.user.uid, createdAt: now, updatedAt: now };
+    const ref = await database.ref("opportunities").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/opportunities/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid ID." });
+    const itemRef = database.ref(`opportunities/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Opportunity not found." });
+    const existingVal = existing.val();
+    if (existingVal.postedByUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "Not authorized." });
+    }
+    const validated = validateOpportunity(req.body);
+    const now = Date.now();
+    const saved = { ...existingVal, ...validated, updatedAt: now };
+    await itemRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/opportunities/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid ID." });
+    const itemRef = database.ref(`opportunities/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Opportunity not found." });
+    const existingVal = existing.val();
+    if (existingVal.postedByUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "Not authorized." });
+    }
+    await itemRef.remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/lost-found", async (req, res, next) => {
+  try {
+    const snap = await database.ref("lostFound").get();
+    let items = snapshotToList(snap.val());
+    const { type, category, status, search } = req.query;
+    if (type) items = items.filter((i) => String(i.type || "").toLowerCase() === String(type).toLowerCase());
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (status) items = items.filter((i) => String(i.status || "open").toLowerCase() === String(status).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.description || "").toLowerCase().includes(q) ||
+        String(i.location || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/lost-found", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateLostFoundItem(req.body);
+    const now = Date.now();
+    const saved = { ...validated, reporterUid: req.user.uid, reporterEmail: req.user.email || null, createdAt: now, updatedAt: now };
+    const ref = await database.ref("lostFound").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/lost-found/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    const itemRef = database.ref(`lostFound/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.reporterUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to edit this listing." });
+    }
+    const validated = validateLostFoundItem(req.body);
+    const now = Date.now();
+    const saved = { ...existingVal, ...validated, updatedAt: now };
+    await itemRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/lost-found/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    const itemRef = database.ref(`lostFound/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Listing not found." });
+    const existingVal = existing.val();
+    if (existingVal.reporterUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to delete this listing." });
+    }
+    await itemRef.remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/announcements", async (req, res, next) => {
+  try {
+    const snap = await database.ref("announcements").get();
+    let items = snapshotToList(snap.val());
+    const { category, search } = req.query;
+    if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      items = items.filter((i) =>
+        String(i.title || "").toLowerCase().includes(q) ||
+        String(i.content || "").toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/announcements", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const validated = validateAnnouncement(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: now, updatedAt: now };
+    const ref = await database.ref("announcements").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/announcements/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid announcement ID." });
+    const ref = database.ref(`announcements/${req.params.id}`);
+    const existing = await ref.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Announcement not found." });
+    const validated = validateAnnouncement(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: Number(existing.val().createdAt) || now, updatedAt: now };
+    await ref.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/announcements/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid announcement ID." });
+    await database.ref(`announcements/${req.params.id}`).remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/feedback", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateFeedback(req.body);
+    const now = Date.now();
+    const saved = { ...validated, submittedByUid: req.user.uid, userEmail: req.user.email || null, createdAt: now };
+    const ref = await database.ref("feedback").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/feedback", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("feedback").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/feedback/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid feedback ID." });
+    const ref = database.ref(`feedback/${req.params.id}`);
+    const existing = await ref.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Feedback item not found." });
+    const existingVal = existing.val();
+    const validated = validateFeedback(req.body);
+    const saved = { ...existingVal, ...validated, updatedAt: Date.now() };
+    await ref.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/feedback/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid feedback ID." });
+    await database.ref(`feedback/${req.params.id}`).remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/reports", requireAuth, async (req, res, next) => {
+  try {
+    const validated = validateReport(req.body);
+    const now = Date.now();
+    const saved = { ...validated, reportedByUid: req.user.uid, userEmail: req.user.email || null, createdAt: now, status: "pending" };
+    const ref = await database.ref("reports").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/reports", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("reports").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/reports/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid report ID." });
+    await database.ref(`reports/${req.params.id}`).remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/stats", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const [formulas, directory, events, marketplace, jobs, opportunities, lostFound, announcements, feedback, reports] = await Promise.all([
+      database.ref("formulas").get(),
+      database.ref("directory").get(),
+      database.ref("events").get(),
+      database.ref("marketplace").get(),
+      database.ref("jobs").get(),
+      database.ref("opportunities").get(),
+      database.ref("lostFound").get(),
+      database.ref("announcements").get(),
+      database.ref("feedback").get(),
+      database.ref("reports").get()
+    ]);
+    res.json({
+      stats: {
+        formulas: snapshotToList(formulas.val()).length,
+        directory: snapshotToList(directory.val()).length,
+        events: snapshotToList(events.val()).length,
+        marketplace: snapshotToList(marketplace.val()).length,
+        jobs: snapshotToList(jobs.val()).length,
+        opportunities: snapshotToList(opportunities.val()).length,
+        lostFound: snapshotToList(lostFound.val()).length,
+        announcements: snapshotToList(announcements.val()).length,
+        feedback: snapshotToList(feedback.val()).length,
+        reports: snapshotToList(reports.val()).length
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/formulas", async (req, res, next) => {

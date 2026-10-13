@@ -282,6 +282,144 @@ function snapshotToList(value) {
   return Object.entries(value).map(([id, item]) => ({ ...item, id }));
 }
 
+function validateProfile(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Profile payload must be an object.");
+  const cleanStr = (val, maxLen) => {
+    if (val === undefined || val === null) return "";
+    if (typeof val !== "string") throw new ValidationError("Profile fields must be strings.");
+    return val.trim().slice(0, maxLen);
+  };
+  return {
+    name: cleanStr(data.name, 100),
+    department: cleanStr(data.department, 100),
+    level: cleanStr(data.level, 50),
+    interests: cleanStr(data.interests, 300),
+    skills: cleanStr(data.skills, 300),
+    bio: cleanStr(data.bio, 500),
+    profilePicture: cleanStr(data.profilePicture, 2000)
+  };
+}
+
+function validateDirectoryItem(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Directory item must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Title is required and must be under 150 chars.");
+  const category = typeof data.category === "string" ? data.category.trim() : "general";
+  const description = typeof data.description === "string" ? data.description.trim().slice(0, 1000) : "";
+  const location = typeof data.location === "string" ? data.location.trim().slice(0, 150) : "";
+  const contactEmail = typeof data.contactEmail === "string" ? data.contactEmail.trim().slice(0, 100) : "";
+  const contactPhone = typeof data.contactPhone === "string" ? data.contactPhone.trim().slice(0, 50) : "";
+  const hours = typeof data.hours === "string" ? data.hours.trim().slice(0, 100) : "";
+  return { title, category, description, location, contactEmail, contactPhone, hours };
+}
+
+function validateEvent(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Event payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Event title is required.");
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  if (!description || description.length > 2000) throw new ValidationError("Event description is required (max 2000 chars).");
+  if (!isDate(data.date)) throw new ValidationError("Valid event date (YYYY-MM-DD) is required.");
+  const time = typeof data.time === "string" ? data.time.trim().slice(0, 50) : "";
+  const location = typeof data.location === "string" ? data.location.trim() : "";
+  if (!location || location.length > 150) throw new ValidationError("Event location is required.");
+  const organizer = typeof data.organizer === "string" ? data.organizer.trim() : "";
+  if (!organizer || organizer.length > 100) throw new ValidationError("Event organizer is required.");
+  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "General";
+  return { title, description, date: data.date, time, location, organizer, category };
+}
+
+function validateMarketplaceListing(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Marketplace payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Listing title is required.");
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  if (!description || description.length > 2000) throw new ValidationError("Listing description is required.");
+  const price = typeof data.price === "string" ? data.price.trim().slice(0, 50) : (typeof data.price === "number" ? String(data.price) : "Free");
+  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "Other";
+  const contactInfo = typeof data.contactInfo === "string" ? data.contactInfo.trim() : "";
+  if (!contactInfo || contactInfo.length > 150) throw new ValidationError("Contact info is required.");
+  const status = data.status === "sold" ? "sold" : "active";
+  return { title, description, price, category, contactInfo, status };
+}
+
+function validateJobListing(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Job payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Job title is required.");
+  const type = typeof data.type === "string" ? data.type.trim().slice(0, 50) : "gig";
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  if (!description || description.length > 2000) throw new ValidationError("Job description is required.");
+  const stipend = typeof data.stipend === "string" ? data.stipend.trim().slice(0, 100) : "";
+  const contactInfo = typeof data.contactInfo === "string" ? data.contactInfo.trim() : "";
+  if (!contactInfo || contactInfo.length > 150) throw new ValidationError("Contact info is required.");
+  const deadline = isDate(data.deadline) ? data.deadline : "";
+  return { title, type, description, stipend, contactInfo, deadline };
+}
+
+function validateOpportunity(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Opportunity payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Title is required.");
+  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "Scholarship";
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  if (!description || description.length > 2000) throw new ValidationError("Description is required.");
+  if (!isDate(data.deadline)) throw new ValidationError("Valid deadline date (YYYY-MM-DD) is required.");
+  const link = typeof data.link === "string" ? data.link.trim().slice(0, 500) : "";
+  return { title, category, description, deadline: data.deadline, link };
+}
+
+function validateLostFoundItem(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Lost & found payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Title is required.");
+  const type = data.type === "found" ? "found" : "lost";
+  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "Personal";
+  const location = typeof data.location === "string" ? data.location.trim() : "";
+  if (!location || location.length > 150) throw new ValidationError("Location is required.");
+  if (!isDate(data.date)) throw new ValidationError("Valid date (YYYY-MM-DD) is required.");
+  const contactInfo = typeof data.contactInfo === "string" ? data.contactInfo.trim() : "";
+  if (!contactInfo || contactInfo.length > 150) throw new ValidationError("Contact info is required.");
+  const description = typeof data.description === "string" ? data.description.trim().slice(0, 1000) : "";
+  const status = data.status === "resolved" ? "resolved" : "open";
+  return { title, type, category, location, date: data.date, contactInfo, description, status };
+}
+
+function validateAnnouncement(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Announcement payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || title.length > 150) throw new ValidationError("Announcement title is required.");
+  const content = typeof data.content === "string" ? data.content.trim() : "";
+  if (!content || content.length > 3000) throw new ValidationError("Announcement content is required.");
+  const date = isDate(data.date) ? data.date : new Date().toISOString().slice(0, 10);
+  const author = typeof data.author === "string" ? data.author.trim().slice(0, 100) : "Admin";
+  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "General";
+  return { title, content, date, author, category };
+}
+
+function validateFeedback(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Feedback payload must be an object.");
+  const type = ["feedback", "complaint", "suggestion"].includes(data.type) ? data.type : "feedback";
+  const subject = typeof data.subject === "string" ? data.subject.trim() : "";
+  if (!subject || subject.length > 150) throw new ValidationError("Subject is required.");
+  const message = typeof data.message === "string" ? data.message.trim() : "";
+  if (!message || message.length > 2000) throw new ValidationError("Message is required.");
+  const status = ["new", "under_review", "resolved"].includes(data.status) ? data.status : "new";
+  return { type, subject, message, status };
+}
+
+function validateReport(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Report payload must be an object.");
+  const targetType = typeof data.targetType === "string" ? data.targetType.trim() : "";
+  if (!["marketplace", "lostFound", "jobs", "events"].includes(targetType)) {
+    throw new ValidationError("Invalid report target type.");
+  }
+  if (!validRecordId(data.targetId)) throw new ValidationError("Invalid target ID.");
+  const reason = typeof data.reason === "string" ? data.reason.trim() : "";
+  if (!reason || reason.length > 500) throw new ValidationError("Report reason is required (max 500 chars).");
+  return { targetType, targetId: data.targetId, reason };
+}
+
 module.exports = {
   DAYS,
   ValidationError,
@@ -291,5 +429,15 @@ module.exports = {
   snapshotToList,
   validRecordId,
   validateRecord,
-  validateFormula
+  validateFormula,
+  validateProfile,
+  validateDirectoryItem,
+  validateEvent,
+  validateMarketplaceListing,
+  validateJobListing,
+  validateOpportunity,
+  validateLostFoundItem,
+  validateAnnouncement,
+  validateFeedback,
+  validateReport
 };

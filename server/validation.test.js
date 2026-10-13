@@ -2,7 +2,22 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validRecordId, validateRecord, snapshotToList, validateFormula } = require("./validation");
+const {
+  validRecordId,
+  validateRecord,
+  snapshotToList,
+  validateFormula,
+  validateProfile,
+  validateDirectoryItem,
+  validateEvent,
+  validateMarketplaceListing,
+  validateJobListing,
+  validateOpportunity,
+  validateLostFoundItem,
+  validateAnnouncement,
+  validateFeedback,
+  validateReport
+} = require("./validation");
 
 test("course records retain only allowed, validated fields", () => {
   assert.deepEqual(validateRecord("courses", { code: " MTH 101 ", name: "Mathematics", units: 3 }), {
@@ -74,4 +89,19 @@ test("formula validation enforces required fields and cleans strings", () => {
   assert.equal(validated.name, "Quadratic Formula");
   assert.equal(validated.verified, true);
   assert.throws(() => validateFormula({ ...formulaData, name: "" }), /name is required/);
+});
+
+test("new entity validation functions sanitize and check payload inputs", () => {
+  assert.deepEqual(validateProfile({ name: "Alice", department: "Computer Science", level: "300" }), {
+    name: "Alice", department: "Computer Science", level: "300", interests: "", skills: "", bio: "", profilePicture: ""
+  });
+  assert.equal(validateEvent({ title: "Hackathon", description: "Coding contest", date: "2026-06-01", location: "Hall A", organizer: "CSC Dept" }).title, "Hackathon");
+  assert.throws(() => validateEvent({ title: "Hackathon", description: "Coding contest", date: "invalid-date", location: "Hall A", organizer: "CSC Dept" }), /Valid event date/);
+  assert.equal(validateMarketplaceListing({ title: "Textbook", description: "Used book", price: "₦3000", contactInfo: "08012345678" }).price, "₦3000");
+  assert.equal(validateJobListing({ title: "Web Dev Gig", description: "Build landing page", contactInfo: "email@test.com" }).type, "gig");
+  assert.equal(validateOpportunity({ title: "Scholarship A", category: "Scholarship", description: "Full ride", deadline: "2026-09-01" }).title, "Scholarship A");
+  assert.equal(validateLostFoundItem({ title: "Keys", type: "lost", category: "Personal", location: "Library", date: "2026-05-01", contactInfo: "08000" }).type, "lost");
+  assert.equal(validateAnnouncement({ title: "Exam Schedule Out", content: "Check portal", date: "2026-05-01", author: "Dean" }).author, "Dean");
+  assert.equal(validateFeedback({ type: "complaint", subject: "Water issue", message: "No water in hostel" }).type, "complaint");
+  assert.equal(validateReport({ targetType: "marketplace", targetId: "item123", reason: "Spam listing" }).targetType, "marketplace");
 });

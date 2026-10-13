@@ -12,7 +12,12 @@
 <body class="dashboard-page">
   <header class="app-header">
     <a class="brand" href="./index.html"><span class="brand-mark">A</span><span>AFIT<span class="brand-light">StudentLife</span></span></a>
-    <div class="account-actions"><span class="account-name" id="student-name">Loading your account…</span><button id="logout-button" class="button button-quiet button-small" type="button">Sign out</button></div>
+    <div class="account-actions">
+      <button id="profile-nav-btn" class="button button-quiet button-small" type="button">Profile</button>
+      <button id="admin-nav-btn" class="button button-quiet button-small" type="button" hidden>Admin</button>
+      <span class="account-name" id="student-name">Loading account…</span>
+      <button id="logout-button" class="button button-quiet button-small" type="button">Sign out</button>
+    </div>
   </header>
   <main class="dashboard-wrap">
     <section class="welcome-row">
@@ -34,8 +39,16 @@
       </div>
     </section>
     <section class="dashboard-section">
-      <div class="section-heading compact"><div><p class="eyebrow">Academic Tools Version 2 · 58 Utilities & Formula Library</p><h2>Academic tools</h2></div></div>
-      <div class="tool-filters" id="tool-filters" aria-label="Filter academic tools"></div>
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">34 Platform Sections · Comprehensive Campus Hub</p>
+          <h2>Campus Platform & Academic Tools</h2>
+        </div>
+        <div class="search-bar-wrap">
+          <input type="search" id="platform-search" placeholder="Search sections, tools, directory, marketplace…" aria-label="Search platform sections">
+        </div>
+      </div>
+      <div class="tool-filters" id="tool-filters" aria-label="Filter campus platform sections"></div>
       <div class="tool-grid" id="tool-grid" aria-live="polite">
         <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
         <div class="skeleton-card" aria-hidden="true"><span></span><i></i><i></i></div>
