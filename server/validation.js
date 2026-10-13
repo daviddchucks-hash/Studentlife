@@ -39,8 +39,35 @@ const definitions = {
   "study-plans": {
     path: "studyPlans",
     fields: { title: ["text", true, 160], entries: ["studyPlanEntries", true] }
+  },
+  flashcards: {
+    path: "flashcards",
+    fields: { front: ["text", true, 500], back: ["text", true, 1000], deck: ["text", false, 100], tags: ["text", false, 200] }
+  },
+  notes: {
+    path: "notes",
+    fields: { title: ["text", true, 150], course: ["text", false, 100], content: ["text", true, 5000], tags: ["text", false, 200] }
+  },
+  quizzes: {
+    path: "quizzes",
+    fields: { title: ["text", true, 150], subject: ["text", false, 100], questions: ["quizQuestions", true] }
+  },
+  "revision-plans": {
+    path: "revisionPlans",
+    fields: { topic: ["text", true, 150], subject: ["text", false, 100], priority: ["priority", true], targetDate: ["date", true], status: ["revisionStatus", true] }
+  },
+  "reading-progress": {
+    path: "readingProgress",
+    fields: { title: ["text", true, 150], subject: ["text", false, 100], totalPages: ["positiveInteger", true], completedPages: ["nonNegativeInteger", true], notes: ["text", false, 500] }
+  },
+  "topic-checklists": {
+    path: "topicChecklist",
+    fields: { subject: ["text", true, 100], topic: ["text", true, 150], completed: ["boolean", true] }
   }
 };
+
+const PRIORITIES = ["Low", "Medium", "High"];
+const REVISION_STATUSES = ["Not started", "In progress", "Completed"];
 
 class ValidationError extends Error {
   constructor(message) {
@@ -125,6 +152,47 @@ function validateField(key, value, [kind, required, maxLength]) {
     if (!ASSIGNMENT_STATUSES.includes(value)) throw new ValidationError("Choose a valid assignment status.");
     return value;
   }
+  if (kind === "priority") {
+    if (!PRIORITIES.includes(value)) throw new ValidationError("Priority must be Low, Medium, or High.");
+    return value;
+  }
+  if (kind === "revisionStatus") {
+    if (!REVISION_STATUSES.includes(value)) throw new ValidationError("Status must be Not started, In progress, or Completed.");
+    return value;
+  }
+  if (kind === "positiveInteger") {
+    if (!Number.isInteger(value) || value <= 0 || value > 100000) throw new ValidationError(`${key} must be a positive number.`);
+    return value;
+  }
+  if (kind === "nonNegativeInteger") {
+    if (!Number.isInteger(value) || value < 0 || value > 100000) throw new ValidationError(`${key} must be 0 or greater.`);
+    return value;
+  }
+  if (kind === "boolean") {
+    if (typeof value !== "boolean") throw new ValidationError(`${key} must be true or false.`);
+    return value;
+  }
+  if (kind === "quizQuestions") {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 50) {
+      throw new ValidationError("Quiz must contain between 1 and 50 questions.");
+    }
+    return value.map((q, idx) => {
+      if (!isPlainObject(q)) throw new ValidationError(`Question ${idx + 1} is invalid.`);
+      const question = typeof q.question === "string" ? q.question.trim() : "";
+      if (!question || question.length > 500) throw new ValidationError(`Question ${idx + 1} must have a valid question text.`);
+      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6) {
+        throw new ValidationError(`Question ${idx + 1} must have between 2 and 6 options.`);
+      }
+      const options = q.options.map((opt) => String(opt || "").trim()).filter(Boolean);
+      if (options.length < 2) throw new ValidationError(`Question ${idx + 1} options cannot be blank.`);
+      const correctIndex = Number(q.correctIndex);
+      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+        throw new ValidationError(`Question ${idx + 1} has an invalid correct option index.`);
+      }
+      const explanation = typeof q.explanation === "string" ? q.explanation.trim().slice(0, 500) : "";
+      return { question, options, correctIndex, explanation };
+    });
+  }
   if (kind === "studyPlanEntries") return validateStudyPlanEntries(value);
   throw new ValidationError(`Unsupported field: ${key}.`);
 }
@@ -160,6 +228,55 @@ function validRecordId(id) {
   return typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id);
 }
 
+function validateFormula(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Formula payload must be an object.");
+  const cleanString = (val, name, required, maxLen) => {
+    if (val === undefined || val === null || val === "") {
+      if (required) throw new ValidationError(`${name} is required.`);
+      return "";
+    }
+    if (typeof val !== "string") throw new ValidationError(`${name} must be a string.`);
+    const trimmed = val.trim();
+    if (!trimmed && required) throw new ValidationError(`${name} is required.`);
+    if (trimmed.length > maxLen) throw new ValidationError(`${name} cannot exceed ${maxLen} characters.`);
+    return trimmed;
+  };
+
+  const name = cleanString(data.name, "name", true, 150);
+  const subject = cleanString(data.subject, "subject", true, 100);
+  const level = cleanString(data.level, "level", true, 80);
+  const topic = cleanString(data.topic, "topic", true, 100);
+  const formula = cleanString(data.formula, "formula", true, 300);
+  const formulaLatex = cleanString(data.formulaLatex, "formulaLatex", false, 500);
+  const description = cleanString(data.description, "description", true, 2000);
+  const variables = cleanString(data.variables, "variables", false, 1000);
+  const units = cleanString(data.units, "units", false, 200);
+  const conditions = cleanString(data.conditions, "conditions", false, 500);
+  const examples = cleanString(data.examples, "examples", false, 1500);
+  const tags = cleanString(data.tags, "tags", false, 300);
+  const relatedFormulaIds = cleanString(data.relatedFormulaIds, "relatedFormulaIds", false, 300);
+  const source = cleanString(data.source, "source", false, 200);
+  const verified = typeof data.verified === "boolean" ? data.verified : false;
+
+  return {
+    name,
+    subject,
+    level,
+    topic,
+    formula,
+    formulaLatex,
+    description,
+    variables,
+    units,
+    conditions,
+    examples,
+    tags,
+    relatedFormulaIds,
+    source,
+    verified
+  };
+}
+
 function snapshotToList(value) {
   if (!isPlainObject(value)) return [];
   return Object.entries(value).map(([id, item]) => ({ ...item, id }));
@@ -173,5 +290,6 @@ module.exports = {
   isDate,
   snapshotToList,
   validRecordId,
-  validateRecord
+  validateRecord,
+  validateFormula
 };

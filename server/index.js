@@ -4,7 +4,7 @@ const express = require("express");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
-const { definitions, getDefinition, snapshotToList, validRecordId, validateRecord } = require("./validation");
+const { definitions, getDefinition, snapshotToList, validRecordId, validateRecord, validateFormula } = require("./validation");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 const databaseURL = process.env.FIREBASE_DATABASE_URL;
@@ -97,6 +97,29 @@ async function requireAuth(req, res, next) {
   }
 }
 
+function checkIsAdmin(user) {
+  if (!user) return false;
+  if (user.admin === true) return true;
+  const adminEmails = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (user.email && adminEmails.includes(user.email.toLowerCase())) return true;
+  const adminUids = (process.env.ADMIN_UIDS || "")
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+  if (user.uid && adminUids.includes(user.uid)) return true;
+  return false;
+}
+
+function requireAdmin(req, res, next) {
+  if (!checkIsAdmin(req.user)) {
+    return res.status(403).json({ error: "Administrator access required." });
+  }
+  next();
+}
+
 function userRef(uid, path) {
   return database.ref(`users/${uid}/${path}`);
 }
@@ -131,7 +154,154 @@ app.get("/api/content/:section", async (req, res, next) => {
 });
 
 app.get("/api/me", requireAuth, (req, res) => {
-  res.json({ uid: req.user.uid, email: req.user.email || null, name: req.user.name || null });
+  const isAdmin = checkIsAdmin(req.user);
+  res.json({ uid: req.user.uid, email: req.user.email || null, name: req.user.name || null, isAdmin });
+});
+
+app.get("/api/formulas", async (req, res, next) => {
+  try {
+    const snapshot = await database.ref("formulas").get();
+    let formulas = snapshotToList(snapshot.val());
+
+    const { subject, level, topic, search } = req.query;
+    if (subject) {
+      formulas = formulas.filter((f) => String(f.subject || "").toLowerCase() === String(subject).toLowerCase());
+    }
+    if (level) {
+      formulas = formulas.filter((f) => String(f.level || "").toLowerCase() === String(level).toLowerCase());
+    }
+    if (topic) {
+      formulas = formulas.filter((f) => String(f.topic || "").toLowerCase() === String(topic).toLowerCase());
+    }
+    if (search) {
+      const q = String(search).toLowerCase().trim();
+      formulas = formulas.filter((f) =>
+        String(f.name || "").toLowerCase().includes(q) ||
+        String(f.description || "").toLowerCase().includes(q) ||
+        String(f.formula || "").toLowerCase().includes(q) ||
+        String(f.tags || "").toLowerCase().includes(q) ||
+        String(f.topic || "").toLowerCase().includes(q)
+      );
+    }
+
+    res.json({ items: formulas });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/formulas/export", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snapshot = await database.ref("formulas").get();
+    const items = snapshotToList(snapshot.val());
+    res.json({ items, exportedAt: new Date().toISOString() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/formulas", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const validated = validateFormula(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: now, updatedAt: now };
+    const ref = await database.ref("formulas").push(saved);
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/formulas/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid formula ID." });
+    const formulaRef = database.ref(`formulas/${req.params.id}`);
+    const existing = await formulaRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Formula not found." });
+    const validated = validateFormula(req.body);
+    const now = Date.now();
+    const saved = { ...validated, createdAt: Number(existing.val().createdAt) || now, updatedAt: now };
+    await formulaRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/formulas/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid formula ID." });
+    await database.ref(`formulas/${req.params.id}`).remove();
+    res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/formulas/import", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { items, overwrite } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Import payload must include a non-empty array of formula items." });
+    }
+    if (items.length > 500) {
+      return res.status(400).json({ error: "Import batch size cannot exceed 500 formulas at once." });
+    }
+
+    const existingSnapshot = await database.ref("formulas").get();
+    const existingList = snapshotToList(existingSnapshot.val());
+    const existingMap = new Map();
+    for (const item of existingList) {
+      const key = `${String(item.name || "").toLowerCase()}|${String(item.subject || "").toLowerCase()}|${String(item.level || "").toLowerCase()}`;
+      existingMap.set(key, item.id);
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const errors = [];
+    const now = Date.now();
+    const updates = {};
+
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i];
+      try {
+        const validated = validateFormula(raw);
+        const dupKey = `${validated.name.toLowerCase()}|${validated.subject.toLowerCase()}|${validated.level.toLowerCase()}`;
+        const existingId = existingMap.get(dupKey);
+
+        if (existingId && !overwrite) {
+          skippedCount++;
+          continue;
+        }
+
+        const id = existingId || database.ref("formulas").push().key;
+        updates[`formulas/${id}`] = {
+          ...validated,
+          createdAt: existingId ? Number(existingList.find((x) => x.id === existingId)?.createdAt) || now : now,
+          updatedAt: now
+        };
+        existingMap.set(dupKey, id);
+        importedCount++;
+      } catch (err) {
+        failedCount++;
+        errors.push({ index: i + 1, name: raw?.name || "Unknown", error: err.message });
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await database.ref().update(updates);
+    }
+
+    res.json({
+      importedCount,
+      skippedCount,
+      failedCount,
+      errors
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/dashboard", requireAuth, async (req, res, next) => {

@@ -45,6 +45,26 @@
 .lower-panel { min-height: 160px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
 .panel-heading h2, .lower-panel h2 { margin-bottom: 14px; font-size: 19px; }
 .recent-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Formula Library & Badges */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.badge-success { background: #e2f5ec; color: #1e6b45; border: 1px solid #bce6d1; }
+.badge-warning { background: #fff4de; color: #8a580c; border: 1px solid #f2d29b; }
+
+.formula-cards-grid { display: grid; gap: 14px; margin-top: 14px; }
+.formula-card { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfc; }
+.formula-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.formula-meta { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.formula-head h3 { margin: 4px 0 0; font-size: 17px; }
+.formula-display { padding: 10px 14px; border: 1px solid #dbe3e8; border-radius: 6px; background: #ffffff; margin-bottom: 10px; font-size: 16px; font-weight: 600; font-family: monospace; }
+.formula-desc { color: var(--ink); font-size: 13px; margin: 0 0 8px; }
+.formula-detail { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.formula-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.timer-card { text-align: center; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: #fdfefe; }
+.timer-display { font-size: 48px; font-weight: 800; font-family: monospace; letter-spacing: -0.03em; margin-bottom: 14px; color: var(--ink); }
+.timer-controls { display: flex; justify-content: center; gap: 10px; }
+.citation-block { margin: 10px 0; padding: 10px 14px; border-left: 3px solid var(--blue); background: #f0f6fa; font-style: normal; font-size: 13px; word-break: break-word; }
 .recent-link { padding: 8px 11px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--blue); font-size: 12px; font-weight: 650; }
 .info-panel { background: #f0f4f6; }
 .info-panel .muted { max-width: 500px; }

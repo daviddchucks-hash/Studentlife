@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validRecordId, validateRecord, snapshotToList } = require("./validation");
+const { validRecordId, validateRecord, snapshotToList, validateFormula } = require("./validation");
 
 test("course records retain only allowed, validated fields", () => {
   assert.deepEqual(validateRecord("courses", { code: " MTH 101 ", name: "Mathematics", units: 3 }), {
@@ -41,4 +41,37 @@ test("record IDs and Firebase snapshots are safely normalized", () => {
   assert.equal(validRecordId("-OAbc_123"), true);
   assert.equal(validRecordId("../other-user"), false);
   assert.deepEqual(snapshotToList({ key1: { title: "First" } }), [{ title: "First", id: "key1" }]);
+});
+
+test("flashcards, notes, quizzes, and revision plans validate correctly", () => {
+  assert.deepEqual(validateRecord("flashcards", { front: "Q?", back: "A", deck: "Math" }), {
+    front: "Q?", back: "A", deck: "Math"
+  });
+  assert.deepEqual(validateRecord("notes", { title: "Note 1", content: "Some content" }), {
+    title: "Note 1", content: "Some content"
+  });
+  const quiz = validateRecord("quizzes", {
+    title: "Math Quiz",
+    questions: [{ question: "1+1?", options: ["2", "3"], correctIndex: 0, explanation: "Basic math" }]
+  });
+  assert.equal(quiz.questions.length, 1);
+  assert.deepEqual(validateRecord("revision-plans", { topic: "Algebra", priority: "High", targetDate: "2026-05-10", status: "Not started" }), {
+    topic: "Algebra", priority: "High", targetDate: "2026-05-10", status: "Not started"
+  });
+});
+
+test("formula validation enforces required fields and cleans strings", () => {
+  const formulaData = {
+    name: "Quadratic Formula",
+    subject: "Mathematics",
+    level: "O-Level",
+    topic: "Algebra",
+    formula: "x = (-b ± √(b² - 4ac)) / (2a)",
+    description: "Solves ax² + bx + c = 0",
+    verified: true
+  };
+  const validated = validateFormula(formulaData);
+  assert.equal(validated.name, "Quadratic Formula");
+  assert.equal(validated.verified, true);
+  assert.throws(() => validateFormula({ ...formulaData, name: "" }), /name is required/);
 });
