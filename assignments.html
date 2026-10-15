@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Assignments & Projects — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header"></header>
+  <main class="page-container">
+    <section class="page-header">
+      <p class="eyebrow">Coursework Tracker</p>
+      <h1>Assignments & Deadlines</h1>
+      <p>Keep track of assignment deadlines, coursework progress, and submission dates.</p>
+    </section>
+
+    <div class="dashboard-section" style="margin-bottom:20px;">
+      <h2 style="font-size:18px; margin-bottom:12px;">Add Assignment or Deadline</h2>
+      <form id="assignment-form" class="tool-form">
+        <div class="form-row">
+          <label class="field">Title / Task<input name="title" required placeholder="e.g. Lab Report 2"></label>
+          <label class="field">Course Code (optional)<input name="course" placeholder="e.g. PHY 102"></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Due Date<input type="date" name="dueDate" required></label>
+          <label class="field">Status
+            <select name="status">
+              <option value="To do">To do</option>
+              <option value="In progress">In progress</option>
+              <option value="Complete">Complete</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">Notes (optional)<textarea name="notes" rows="2" placeholder="Submission instructions, instructions, or notes..."></textarea></label>
+        <div id="assignment-form-msg"></div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="button button-primary">Save Assignment</button>
+          <button type="reset" class="button button-quiet">Reset</button>
+        </div>
+      </form>
+    </div>
+
+    <nav class="tab-nav" id="assignment-filter-tabs">
+      <button class="tab-btn active" data-filter="all">All Items</button>
+      <button class="tab-btn" data-filter="todo">To Do</button>
+      <button class="tab-btn" data-filter="in-progress">In Progress</button>
+      <button class="tab-btn" data-filter="complete">Completed</button>
+    </nav>
+
+    <div id="assignments-list-container"></div>
+  </main>
+
+  <footer class="site-footer app-footer">
+    <a href="./index.html">AFITStudentLife</a>
+    <span>Tools for your academic routine.</span>
+  </footer>
+
+  <script type="module" src="./js/page-assignments.js"></script>
+</body>
+</html>

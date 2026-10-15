@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Timetable & Schedule — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header"></header>
+  <main class="page-container">
+    <section class="page-header">
+      <p class="eyebrow">Weekly Planning</p>
+      <h1>Timetable & Schedule</h1>
+      <p>Organize your weekly class schedule, check today's classes, and detect overlapping times.</p>
+    </section>
+
+    <div class="dashboard-section" style="margin-bottom:20px;">
+      <h2 style="font-size:18px; margin-bottom:12px;">Add Class Entry</h2>
+      <form id="timetable-form" class="tool-form">
+        <div class="form-row">
+          <label class="field">Course / Activity<input name="course" required placeholder="e.g. MTH 101 Lecture"></label>
+          <label class="field">Day
+            <select name="day" required>
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">Start Time<input type="time" name="start" required></label>
+          <label class="field">End Time<input type="time" name="end" required></label>
+        </div>
+        <label class="field">Venue (optional)<input name="venue" placeholder="e.g. ETF Lecture Theatre 2"></label>
+        <div id="timetable-form-msg"></div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="button button-primary">Save Class</button>
+          <button type="reset" class="button button-quiet">Reset</button>
+        </div>
+      </form>
+    </div>
+
+    <nav class="tab-nav" id="timetable-view-tabs">
+      <button class="tab-btn active" data-view="weekly">Weekly Grid View</button>
+      <button class="tab-btn" data-view="today">Today's Schedule</button>
+      <button class="tab-btn" data-view="list">List View</button>
+    </nav>
+
+    <div id="timetable-display-area"></div>
+  </main>
+
+  <footer class="site-footer app-footer">
+    <a href="./index.html">AFITStudentLife</a>
+    <span>Tools for your academic routine.</span>
+  </footer>
+
+  <script type="module" src="./js/page-timetable.js"></script>
+</body>
+</html>
