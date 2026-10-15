@@ -1,8 +1,13 @@
 import { apiRequest } from "./api.js";
+import { createSmartSaveTracker } from "./smart-save.js";
 
 function escapeHtml(value = "") {
-  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#39;" })[char]);
 }
+
+let editingAncId = null;
+let editingDirId = null;
+let activeTrackers = new Map();
 
 export async function renderAdminModule(container) {
   container.innerHTML = '<p class="muted">Checking administrator access…</p>';
@@ -39,6 +44,9 @@ export async function renderAdminModule(container) {
     const contentArea = container.querySelector("#admin-tab-content");
 
     const loadTab = async (tabName) => {
+      activeTrackers.forEach((t) => t.destroy());
+      activeTrackers.clear();
+
       tabsNav.querySelectorAll(".admin-tab-btn").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
       });
@@ -86,19 +94,109 @@ export async function renderAdminModule(container) {
         const list = contentArea.querySelector("#admin-anc-list");
 
         const loadAnc = async () => {
+          activeTrackers.forEach((t) => t.destroy());
+          activeTrackers.clear();
+
           const res = await apiRequest("/api/announcements");
           const items = res.items || [];
-          list.innerHTML = items.length ? items.map((i) => `
-            <div class="record-item">
-              <div><strong>${escapeHtml(i.title)}</strong><small>${escapeHtml(i.date)} · ${escapeHtml(i.content)}</small></div>
-              <button class="record-delete" type="button" data-del-anc="${i.id}">Delete</button>
-            </div>
-          `).join("") : '<p class="muted">No announcements.</p>';
+
+          if (!items.length) {
+            list.innerHTML = '<p class="muted">No announcements.</p>';
+            return;
+          }
+
+          list.innerHTML = items.map((i) => {
+            if (editingAncId === i.id) {
+              return `
+                <div class="view-card" id="edit-anc-card-${i.id}" style="margin-bottom:12px;">
+                  <h4 style="margin-top:0; margin-bottom:12px;">Edit Announcement</h4>
+                  <form class="tool-form" id="edit-anc-form-${i.id}">
+                    <div class="form-row">
+                      <label class="field">Title<input name="title" required value="${escapeHtml(i.title)}"></label>
+                      <label class="field">Category
+                        <select name="category">
+                          <option ${i.category === "General" ? "selected" : ""}>General</option>
+                          <option ${i.category === "Academic" ? "selected" : ""}>Academic</option>
+                          <option ${i.category === "Exams" ? "selected" : ""}>Exams</option>
+                          <option ${i.category === "Hostels" ? "selected" : ""}>Hostels</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label class="field">Content<textarea name="content" required rows="3">${escapeHtml(i.content)}</textarea></label>
+                    <div id="edit-anc-msg-${i.id}"></div>
+                    <div class="inline-actions" style="margin-top:12px; display:flex; gap:10px;">
+                      <button type="submit" class="button button-primary button-small save-button" id="save-anc-btn-${i.id}" disabled>Save Changes</button>
+                      <button type="button" class="button button-quiet button-small" id="cancel-anc-btn-${i.id}">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="record-item">
+                <div><strong>${escapeHtml(i.title)} (${escapeHtml(i.category || "General")})</strong><small>${escapeHtml(i.date)} · ${escapeHtml(i.content)}</small></div>
+                <div style="display:flex; gap:6px;">
+                  <button class="record-update" type="button" data-edit-anc="${i.id}">Edit</button>
+                  <button class="record-delete" type="button" data-del-anc="${i.id}">Delete</button>
+                </div>
+              </div>
+            `;
+          }).join("");
+
+          if (editingAncId) {
+            const item = items.find((x) => x.id === editingAncId);
+            if (item) {
+              const eForm = list.querySelector(`#edit-anc-form-${item.id}`);
+              const saveBtn = list.querySelector(`#save-anc-btn-${item.id}`);
+              const cancelBtn = list.querySelector(`#cancel-anc-btn-${item.id}`);
+              const msg = list.querySelector(`#edit-anc-msg-${item.id}`);
+
+              const baseline = { title: item.title, category: item.category || "General", content: item.content };
+              const tracker = createSmartSaveTracker(eForm, saveBtn, { initialSnapshot: baseline });
+              activeTrackers.set(item.id, tracker);
+
+              cancelBtn.onclick = () => {
+                if (tracker.hasChanged() && !confirm("Discard unsaved changes?")) return;
+                editingAncId = null;
+                loadAnc();
+              };
+
+              eForm.onsubmit = async (e) => {
+                e.preventDefault();
+                saveBtn.disabled = true;
+                saveBtn.textContent = "Saving...";
+                try {
+                  await apiRequest(`/api/admin/announcements/${item.id}`, {
+                    method: "PUT",
+                    body: {
+                      title: eForm.title.value.trim(),
+                      category: eForm.category.value,
+                      content: eForm.content.value.trim(),
+                      author: item.author || me.email || "Admin"
+                    }
+                  });
+                  editingAncId = null;
+                  await loadAnc();
+                } catch (err) {
+                  saveBtn.disabled = false;
+                  saveBtn.textContent = "Save Changes";
+                  msg.innerHTML = `<div class="error-box">${escapeHtml(err.message || "Unable to save announcement.")}</div>`;
+                }
+              };
+            }
+          }
 
           list.onclick = async (e) => {
+            const editBtn = e.target.closest("[data-edit-anc]");
             const delBtn = e.target.closest("[data-del-anc]");
-            if (delBtn && confirm("Delete this announcement?")) {
+
+            if (editBtn) {
+              editingAncId = editBtn.dataset.editAnc;
+              loadAnc();
+            } else if (delBtn && confirm("Delete this announcement?")) {
               await apiRequest(`/api/admin/announcements/${delBtn.dataset.delAnc}`, { method: "DELETE" });
+              if (editingAncId === delBtn.dataset.delAnc) editingAncId = null;
               await loadAnc();
             }
           };
@@ -144,19 +242,122 @@ export async function renderAdminModule(container) {
         const list = contentArea.querySelector("#admin-dir-list");
 
         const loadDir = async () => {
+          activeTrackers.forEach((t) => t.destroy());
+          activeTrackers.clear();
+
           const res = await apiRequest("/api/directory");
           const items = res.items || [];
-          list.innerHTML = items.length ? items.map((i) => `
-            <div class="record-item">
-              <div><strong>${escapeHtml(i.title)} (${escapeHtml(i.category)})</strong><small>${escapeHtml(i.description || "")}</small></div>
-              <button class="record-delete" type="button" data-del-dir="${i.id}">Delete</button>
-            </div>
-          `).join("") : '<p class="muted">No directory entries.</p>';
+
+          if (!items.length) {
+            list.innerHTML = '<p class="muted">No directory entries.</p>';
+            return;
+          }
+
+          list.innerHTML = items.map((i) => {
+            if (editingDirId === i.id) {
+              return `
+                <div class="view-card" id="edit-dir-card-${i.id}" style="margin-bottom:12px;">
+                  <h4 style="margin-top:0; margin-bottom:12px;">Edit Directory Entry</h4>
+                  <form class="tool-form" id="edit-dir-form-${i.id}">
+                    <div class="form-row">
+                      <label class="field">Title / Office<input name="title" required value="${escapeHtml(i.title)}"></label>
+                      <label class="field">Category
+                        <select name="category">
+                          <option ${i.category === "department" ? "selected" : ""}>department</option>
+                          <option ${i.category === "faculty" ? "selected" : ""}>faculty</option>
+                          <option ${i.category === "office" ? "selected" : ""}>office</option>
+                          <option ${i.category === "service" ? "selected" : ""}>service</option>
+                          <option ${i.category === "location" ? "selected" : ""}>location</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="form-row">
+                      <label class="field">Location<input name="location" value="${escapeHtml(i.location || "")}"></label>
+                      <label class="field">Contact Email<input name="contactEmail" value="${escapeHtml(i.contactEmail || "")}"></label>
+                    </div>
+                    <label class="field">Description<textarea name="description" rows="2">${escapeHtml(i.description || "")}</textarea></label>
+                    <div id="edit-dir-msg-${i.id}"></div>
+                    <div class="inline-actions" style="margin-top:12px; display:flex; gap:10px;">
+                      <button type="submit" class="button button-primary button-small save-button" id="save-dir-btn-${i.id}" disabled>Save Changes</button>
+                      <button type="button" class="button button-quiet button-small" id="cancel-dir-btn-${i.id}">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="record-item">
+                <div><strong>${escapeHtml(i.title)} (${escapeHtml(i.category)})</strong><small>${escapeHtml(i.description || "")}</small></div>
+                <div style="display:flex; gap:6px;">
+                  <button class="record-update" type="button" data-edit-dir="${i.id}">Edit</button>
+                  <button class="record-delete" type="button" data-del-dir="${i.id}">Delete</button>
+                </div>
+              </div>
+            `;
+          }).join("");
+
+          if (editingDirId) {
+            const item = items.find((x) => x.id === editingDirId);
+            if (item) {
+              const eForm = list.querySelector(`#edit-dir-form-${item.id}`);
+              const saveBtn = list.querySelector(`#save-dir-btn-${item.id}`);
+              const cancelBtn = list.querySelector(`#cancel-dir-btn-${item.id}`);
+              const msg = list.querySelector(`#edit-dir-msg-${item.id}`);
+
+              const baseline = {
+                title: item.title,
+                category: item.category,
+                location: item.location || "",
+                contactEmail: item.contactEmail || "",
+                description: item.description || ""
+              };
+
+              const tracker = createSmartSaveTracker(eForm, saveBtn, { initialSnapshot: baseline });
+              activeTrackers.set(item.id, tracker);
+
+              cancelBtn.onclick = () => {
+                if (tracker.hasChanged() && !confirm("Discard unsaved changes?")) return;
+                editingDirId = null;
+                loadDir();
+              };
+
+              eForm.onsubmit = async (e) => {
+                e.preventDefault();
+                saveBtn.disabled = true;
+                saveBtn.textContent = "Saving...";
+                try {
+                  await apiRequest(`/api/admin/directory/${item.id}`, {
+                    method: "PUT",
+                    body: {
+                      title: eForm.title.value.trim(),
+                      category: eForm.category.value,
+                      location: eForm.location.value.trim() || undefined,
+                      contactEmail: eForm.contactEmail.value.trim() || undefined,
+                      description: eForm.description.value.trim() || undefined
+                    }
+                  });
+                  editingDirId = null;
+                  await loadDir();
+                } catch (err) {
+                  saveBtn.disabled = false;
+                  saveBtn.textContent = "Save Changes";
+                  msg.innerHTML = `<div class="error-box">${escapeHtml(err.message || "Unable to save directory item.")}</div>`;
+                }
+              };
+            }
+          }
 
           list.onclick = async (e) => {
+            const editBtn = e.target.closest("[data-edit-dir]");
             const delBtn = e.target.closest("[data-del-dir]");
-            if (delBtn && confirm("Delete directory item?")) {
+
+            if (editBtn) {
+              editingDirId = editBtn.dataset.editDir;
+              loadDir();
+            } else if (delBtn && confirm("Delete directory item?")) {
               await apiRequest(`/api/admin/directory/${delBtn.dataset.delDir}`, { method: "DELETE" });
+              if (editingDirId === delBtn.dataset.delDir) editingDirId = null;
               await loadDir();
             }
           };

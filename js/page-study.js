@@ -2,10 +2,13 @@ import { initNavigation } from "./nav.js";
 import { apiRequest } from "./api.js";
 import { TimerManager, calculateStudyStreak } from "./study-tools.js";
 import { generateStudyPlan } from "./calculations.js";
+import { createSmartSaveTracker } from "./smart-save.js";
 
 let sessionsList = [];
 let activeTimer = null;
 let activeTab = "timer";
+let editingSessionId = null;
+let activeTrackers = new Map();
 
 function escapeHtml(str = "") {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#39;" })[c]);
@@ -31,6 +34,9 @@ function updateStats() {
 
 function renderTab(tab) {
   activeTab = tab;
+  activeTrackers.forEach((t) => t.destroy());
+  activeTrackers.clear();
+
   document.querySelectorAll("#study-tabs .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const container = document.querySelector("#study-tab-content");
 
@@ -154,6 +160,9 @@ function renderLogTab() {
   const container = document.querySelector("#study-tab-content");
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  activeTrackers.forEach((t) => t.destroy());
+  activeTrackers.clear();
+
   container.innerHTML = `
     <div class="dashboard-section" style="margin-bottom:20px;">
       <h3>Log Completed Study Session</h3>
@@ -172,49 +181,124 @@ function renderLogTab() {
     <div id="sessions-list-container">
       ${sessionsList.length ? `
         <div class="record-list">
-          ${sessionsList.map((item) => `
-            <div class="record-item">
-              <div>
-                <strong>${escapeHtml(item.subject)}</strong>
-                <small>⏱️ ${escapeHtml(item.minutes)} minutes studied on 📅 ${escapeHtml(item.date)}</small>
+          ${sessionsList.map((item) => {
+            if (editingSessionId === item.id) {
+              return `
+                <div class="view-card" id="edit-session-card-${item.id}" style="margin-bottom:12px;">
+                  <h4 style="margin-top:0; margin-bottom:12px;">Edit Study Session</h4>
+                  <form class="tool-form" id="edit-session-form-${item.id}">
+                    <div class="form-row">
+                      <label class="field">Subject / Course<input name="subject" required value="${escapeHtml(item.subject)}"></label>
+                      <label class="field">Minutes Studied<input type="number" min="1" max="600" name="minutes" required value="${escapeHtml(item.minutes)}"></label>
+                    </div>
+                    <label class="field">Date Studied<input type="date" name="date" required value="${escapeHtml(item.date)}"></label>
+                    <div id="edit-session-msg-${item.id}"></div>
+                    <div class="inline-actions" style="margin-top:12px; display:flex; gap:10px;">
+                      <button type="submit" class="button button-primary button-small save-button" id="save-session-btn-${item.id}" disabled>Save Changes</button>
+                      <button type="button" class="button button-quiet button-small" id="cancel-session-btn-${item.id}">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              `;
+            }
+
+            return `
+              <div class="record-item">
+                <div>
+                  <strong>${escapeHtml(item.subject)}</strong>
+                  <small>⏱️ ${escapeHtml(item.minutes)} minutes studied on 📅 ${escapeHtml(item.date)}</small>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button class="record-update" data-edit-session-id="${item.id}">Edit</button>
+                  <button class="record-delete" data-delete-session-id="${item.id}">Delete</button>
+                </div>
               </div>
-              <button class="record-delete" data-delete-session-id="${item.id}">Delete</button>
-            </div>
-          `).join("")}
+            `;
+          }).join("")}
         </div>
       ` : `<p class="empty-state">No study sessions logged yet. Log your first session above!</p>`}
     </div>
   `;
 
+  if (editingSessionId) {
+    const item = sessionsList.find((x) => x.id === editingSessionId);
+    if (item) {
+      const form = container.querySelector(`#edit-session-form-${item.id}`);
+      const saveBtn = container.querySelector(`#save-session-btn-${item.id}`);
+      const cancelBtn = container.querySelector(`#cancel-session-btn-${item.id}`);
+      const msg = container.querySelector(`#edit-session-msg-${item.id}`);
+
+      const baseline = { subject: item.subject, minutes: String(item.minutes), date: item.date };
+      const tracker = createSmartSaveTracker(form, saveBtn, { initialSnapshot: baseline });
+      activeTrackers.set(item.id, tracker);
+
+      cancelBtn.onclick = () => {
+        if (tracker.hasChanged() && !confirm("Discard unsaved changes?")) return;
+        editingSessionId = null;
+        renderLogTab();
+      };
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+        try {
+          await apiRequest(`/api/records/study-sessions/${item.id}`, {
+            method: "PUT",
+            body: {
+              subject: form.subject.value.trim(),
+              minutes: Number(form.minutes.value),
+              date: form.date.value
+            }
+          });
+          editingSessionId = null;
+          await loadStudyData();
+        } catch (err) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Changes";
+          msg.innerHTML = `<div class="error-box">${escapeHtml(err.message || "Unable to save changes.")}</div>`;
+        }
+      };
+    }
+  }
+
   const logForm = container.querySelector("#study-log-form");
   const logMsg = container.querySelector("#log-form-msg");
 
-  logForm.onsubmit = async (e) => {
-    e.preventDefault();
-    logMsg.innerHTML = '<p class="muted">Saving session…</p>';
-    const payload = {
-      subject: logForm.subject.value.trim(),
-      minutes: Number(logForm.minutes.value),
-      date: logForm.date.value
-    };
+  if (logForm) {
+    logForm.onsubmit = async (e) => {
+      e.preventDefault();
+      logMsg.innerHTML = '<p class="muted">Saving session…</p>';
+      const payload = {
+        subject: logForm.subject.value.trim(),
+        minutes: Number(logForm.minutes.value),
+        date: logForm.date.value
+      };
 
-    try {
-      await apiRequest("/api/records/study-sessions", { method: "POST", body: payload });
-      logMsg.innerHTML = '<div class="result-box">Study session logged!</div>';
-      logForm.reset();
-      await loadStudyData();
-    } catch (err) {
-      logMsg.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
-    }
-  };
+      try {
+        await apiRequest("/api/records/study-sessions", { method: "POST", body: payload });
+        logMsg.innerHTML = '<div class="result-box">Study session logged!</div>';
+        logForm.reset();
+        await loadStudyData();
+      } catch (err) {
+        logMsg.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+      }
+    };
+  }
 
   container.querySelector("#sessions-list-container").onclick = async (e) => {
+    const editBtn = e.target.closest("[data-edit-session-id]");
     const delBtn = e.target.closest("[data-delete-session-id]");
-    if (delBtn) {
+
+    if (editBtn) {
+      editingSessionId = editBtn.dataset.editSessionId;
+      renderLogTab();
+    } else if (delBtn) {
       const id = delBtn.dataset.deleteSessionId;
       if (confirm("Delete this logged study session?")) {
         try {
           await apiRequest(`/api/records/study-sessions/${id}`, { method: "DELETE" });
+          if (editingSessionId === id) editingSessionId = null;
           await loadStudyData();
         } catch (err) {
           alert(err.message || "Failed to delete study session.");
