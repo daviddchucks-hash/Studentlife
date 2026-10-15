@@ -63,6 +63,10 @@ const definitions = {
   "topic-checklists": {
     path: "topicChecklist",
     fields: { subject: ["text", true, 100], topic: ["text", true, 150], completed: ["boolean", true] }
+  },
+  "formula-bookmarks": {
+    path: "formulaBookmarks",
+    fields: { formulaId: ["text", true, 128], formulaName: ["text", true, 150], subject: ["text", false, 100], formula: ["text", false, 300], topic: ["text", false, 100] }
   }
 };
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Exams & Countdown — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header"></header>
+  <main class="page-container">
+    <section class="page-header">
+      <p class="eyebrow">Exam Organizer</p>
+      <h1>Exams & Countdown Schedule</h1>
+      <p>Log exam dates, venues, and track daily countdowns for every upcoming paper.</p>
+    </section>
+
+    <div class="dashboard-section" style="margin-bottom:20px;">
+      <h2 style="font-size:18px; margin-bottom:12px;">Add Exam Entry</h2>
+      <form id="exam-form" class="tool-form">
+        <div class="form-row">
+          <label class="field">Course / Subject<input name="course" required placeholder="e.g. MTH 201 Examination"></label>
+          <label class="field">Exam Date<input type="date" name="date" required></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Time (optional)<input type="time" name="time"></label>
+          <label class="field">Venue (optional)<input name="venue" placeholder="e.g. Multipurpose Hall B"></label>
+        </div>
+        <div id="exam-form-msg"></div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="button button-primary">Save Exam</button>
+          <button type="reset" class="button button-quiet">Reset</button>
+        </div>
+      </form>
+    </div>
+
+    <h2>Upcoming Exams Countdown</h2>
+    <div id="exams-list-container"></div>
+  </main>
+
+  <footer class="site-footer app-footer">
+    <a href="./index.html">AFITStudentLife</a>
+    <span>Tools for your academic routine.</span>
+  </footer>
+
+  <script type="module" src="./js/page-exams.js"></script>
+</body>
+</html>

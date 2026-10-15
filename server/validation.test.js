@@ -58,6 +58,12 @@ test("record IDs and Firebase snapshots are safely normalized", () => {
   assert.deepEqual(snapshotToList({ key1: { title: "First" } }), [{ title: "First", id: "key1" }]);
 });
 
+test("formula bookmarks validate correctly", () => {
+  assert.deepEqual(validateRecord("formula-bookmarks", { formulaId: "form123", formulaName: "Ohm's Law", subject: "Physics" }), {
+    formulaId: "form123", formulaName: "Ohm's Law", subject: "Physics"
+  });
+});
+
 test("flashcards, notes, quizzes, and revision plans validate correctly", () => {
   assert.deepEqual(validateRecord("flashcards", { front: "Q?", back: "A", deck: "Math" }), {
     front: "Q?", back: "A", deck: "Math"

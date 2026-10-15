@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Study & Timers — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header"></header>
+  <main class="page-container">
+    <section class="page-header">
+      <p class="eyebrow">Study Hub</p>
+      <h1>Study Sessions, Timers & Routine</h1>
+      <p>Log study time, run Pomodoro timers, track study streaks, and build study timetables.</p>
+    </section>
+
+    <div class="overview-stats" id="study-stats-bar" style="margin-bottom:20px;">
+      <article class="summary-stat"><span>Current Streak</span><strong id="streak-count">0 days</strong></article>
+      <article class="summary-stat"><span>Total Study Time</span><strong id="total-study-mins">0 mins</strong></article>
+      <article class="summary-stat"><span>Sessions Logged</span><strong id="total-sessions-count">0</strong></article>
+    </div>
+
+    <nav class="tab-nav" id="study-tabs">
+      <button class="tab-btn active" data-tab="timer">Focus Timer & Pomodoro</button>
+      <button class="tab-btn" data-tab="log">Log Study Session</button>
+      <button class="tab-btn" data-tab="plan">Study Timetable Generator</button>
+    </nav>
+
+    <div id="study-tab-content"></div>
+  </main>
+
+  <footer class="site-footer app-footer">
+    <a href="./index.html">AFITStudentLife</a>
+    <span>Tools for your academic routine.</span>
+  </footer>
+
+  <script type="module" src="./js/page-study.js"></script>
+</body>
+</html>
