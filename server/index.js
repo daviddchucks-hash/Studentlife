@@ -19,6 +19,7 @@ const {
   validateJobListing,
   validateOpportunity,
   validateLostFoundItem,
+  validateLostFoundClaim,
   validateAnnouncement,
   validateFeedback,
   validateReport,
@@ -1065,16 +1066,21 @@ app.delete("/api/opportunities/:id", requireAuth, async (req, res, next) => {
 app.get("/api/lost-found", async (req, res, next) => {
   try {
     const snap = await database.ref("lostFound").get();
-    let items = snapshotToList(snap.val());
-    const { type, category, status, search } = req.query;
+    let items = snapshotToList(snap.val()).filter((item) => {
+      const status = String(item.status || "published").toLowerCase();
+      return status === "published" || status === "match_found" || status === "claim_pending" || status === "resolved" || status === "returned" || status === "recovered";
+    });
+    const { type, category, status, search, location } = req.query;
     if (type) items = items.filter((i) => String(i.type || "").toLowerCase() === String(type).toLowerCase());
     if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
-    if (status) items = items.filter((i) => String(i.status || "open").toLowerCase() === String(status).toLowerCase());
+    if (status) items = items.filter((i) => String(i.status || "published").toLowerCase() === String(status).toLowerCase());
+    if (location) items = items.filter((i) => String(i.location || "").toLowerCase().includes(String(location).toLowerCase()));
     if (search) {
       const q = String(search).toLowerCase().trim();
       items = items.filter((i) =>
         String(i.title || "").toLowerCase().includes(q) ||
         String(i.description || "").toLowerCase().includes(q) ||
+        String(i.identifyingCharacteristics || "").toLowerCase().includes(q) ||
         String(i.location || "").toLowerCase().includes(q)
       );
     }
@@ -1085,11 +1091,125 @@ app.get("/api/lost-found", async (req, res, next) => {
   }
 });
 
+app.get("/api/admin/lost-found", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("lostFound").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/lost-found/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    const itemRef = database.ref(`lostFound/${req.params.id}`);
+    const existing = await itemRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Lost/found item not found." });
+    const current = existing.val();
+    const nextStatus = ["pending_review", "published", "match_found", "claim_pending", "returned", "recovered", "closed", "rejected", "resolved"].includes(req.body?.status)
+      ? req.body.status
+      : current.status;
+    const saved = {
+      ...current,
+      status: nextStatus,
+      reviewNotes: String(req.body?.reviewNotes || current.reviewNotes || "").slice(0, 2000),
+      reviewedByUid: req.user.uid,
+      reviewedAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    await itemRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/lost-found/claims", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("lostFoundClaims").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/lost-found/claims/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid claim ID." });
+    const claimRef = database.ref(`lostFoundClaims/${req.params.id}`);
+    const existing = await claimRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Claim not found." });
+    const current = existing.val();
+    const allowed = ["pending", "under_review", "approved", "rejected", "completed"];
+    const nextStatus = allowed.includes(req.body?.status) ? req.body.status : current.status;
+    const saved = {
+      ...current,
+      status: nextStatus,
+      reviewNotes: String(req.body?.reviewNotes || current.reviewNotes || "").slice(0, 2000),
+      reviewedAt: Date.now(),
+      reviewerUid: req.user.uid
+    };
+    await claimRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/lost-found/my-reports", requireAuth, async (req, res, next) => {
+  try {
+    const snap = await database.ref("lostFound").get();
+    const items = snapshotToList(snap.val()).filter((item) => item.reporterUid === req.user.uid);
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/lost-found/matches/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid item ID." });
+    const itemSnap = await database.ref(`lostFound/${req.params.id}`).get();
+    if (!itemSnap.exists()) return res.status(404).json({ error: "Lost or found item not found." });
+    const target = itemSnap.val();
+    if (target.reporterUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You can only view matches for your own item records." });
+    }
+    const snap = await database.ref("lostFound").get();
+    const allItems = snapshotToList(snap.val()).filter((entry) => entry.id !== req.params.id && entry.visibility !== "private");
+    const matches = allItems.filter((entry) => {
+      if (entry.type === target.type) return false;
+      if (String(entry.category || "").toLowerCase() !== String(target.category || "").toLowerCase()) return false;
+      const q = [String(target.title || ""), String(target.description || ""), String(target.identifyingCharacteristics || "")].join(" ").toLowerCase();
+      const other = [String(entry.title || ""), String(entry.description || ""), String(entry.identifyingCharacteristics || "")].join(" ").toLowerCase();
+      if (!q || !other) return false;
+      const ratio = q.split(/\s+/).filter(Boolean).filter((word) => other.includes(word)).length;
+      return ratio >= 2 || other.includes(String(target.location || "").toLowerCase()) || q.includes(String(entry.location || "").toLowerCase());
+    }).slice(0, 10);
+    res.json({ matches });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/lost-found", requireAuth, async (req, res, next) => {
   try {
     const validated = validateLostFoundItem(req.body);
     const now = Date.now();
-    const saved = { ...validated, reporterUid: req.user.uid, reporterEmail: req.user.email || null, createdAt: now, updatedAt: now };
+    const saved = {
+      ...validated,
+      reporterUid: req.user.uid,
+      reporterEmail: req.user.email || null,
+      createdAt: now,
+      updatedAt: now,
+      status: validated.status === "published" ? "published" : "pending_review"
+    };
     const ref = await database.ref("lostFound").push(saved);
     res.status(201).json({ id: ref.key, record: saved });
   } catch (error) {
@@ -1129,6 +1249,62 @@ app.delete("/api/lost-found/:id", requireAuth, async (req, res, next) => {
     }
     await itemRef.remove();
     res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/lost-found/claims", requireAuth, async (req, res, next) => {
+  try {
+    const payload = validateLostFoundClaim(req.body);
+    const itemSnap = await database.ref(`lostFound/${payload.targetId}`).get();
+    if (!itemSnap.exists()) return res.status(404).json({ error: "Lost or found listing not found." });
+    const item = itemSnap.val();
+    const claimRef = await database.ref("lostFoundClaims").push({
+      ...payload,
+      itemTitle: item.title,
+      itemType: item.type,
+      itemReporterUid: item.reporterUid,
+      claimantUid: req.user.uid,
+      claimantEmail: req.user.email || null,
+      createdAt: Date.now(),
+      reviewedAt: null,
+      reviewerUid: null,
+      reviewNotes: "",
+      status: payload.status
+    });
+    res.status(201).json({ id: claimRef.key, record: { ...payload, id: claimRef.key, itemTitle: item.title, itemType: item.type } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/lost-found/claims", requireAuth, async (req, res, next) => {
+  try {
+    const snap = await database.ref("lostFoundClaims").get();
+    let claims = snapshotToList(snap.val());
+    claims = claims.filter((claim) => claim.claimantUid === req.user.uid || claim.itemReporterUid === req.user.uid || checkIsAdmin(req.user));
+    claims.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items: claims });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/lost-found/claims/:id", requireAuth, async (req, res, next) => {
+  try {
+    if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Invalid claim ID." });
+    const claimRef = database.ref(`lostFoundClaims/${req.params.id}`);
+    const existing = await claimRef.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Claim not found." });
+    const claim = existing.val();
+    if (claim.claimantUid !== req.user.uid && claim.itemReporterUid !== req.user.uid && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "You are not authorized to review this claim." });
+    }
+    const nextStatus = ["pending", "under_review", "approved", "rejected", "completed"].includes(req.body?.status) ? req.body.status : claim.status;
+    const saved = { ...claim, status: nextStatus, reviewNotes: String(req.body?.reviewNotes || claim.reviewNotes || "").slice(0, 2000), reviewedAt: Date.now(), reviewerUid: req.user.uid };
+    await claimRef.set(saved);
+    res.json({ id: req.params.id, record: saved });
   } catch (error) {
     next(error);
   }

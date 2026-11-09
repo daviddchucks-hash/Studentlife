@@ -515,18 +515,66 @@ function validateOpportunity(data) {
 
 function validateLostFoundItem(data) {
   if (!isPlainObject(data)) throw new ValidationError("Lost & found payload must be an object.");
-  const title = typeof data.title === "string" ? data.title.trim() : "";
-  if (!title || title.length > 150) throw new ValidationError("Title is required.");
+
+  const sanitizeText = (value, maxLen, required = false, fieldName = "Field") => {
+    if (value === undefined || value === null || value === "") {
+      if (required) throw new ValidationError(`${fieldName} is required.`);
+      return "";
+    }
+    if (typeof value !== "string") throw new ValidationError(`${fieldName} must be text.`);
+    const cleaned = value.trim();
+    if (required && !cleaned) throw new ValidationError(`${fieldName} is required.`);
+    if (cleaned.length > maxLen) throw new ValidationError(`${fieldName} must be ${maxLen} characters or fewer.`);
+    return cleaned;
+  };
+
+  const title = sanitizeText(data.title, 150, true, "Title");
   const type = data.type === "found" ? "found" : "lost";
-  const category = typeof data.category === "string" ? data.category.trim().slice(0, 50) : "Personal";
-  const location = typeof data.location === "string" ? data.location.trim() : "";
-  if (!location || location.length > 150) throw new ValidationError("Location is required.");
-  if (!isDate(data.date)) throw new ValidationError("Valid date (YYYY-MM-DD) is required.");
-  const contactInfo = typeof data.contactInfo === "string" ? data.contactInfo.trim() : "";
-  if (!contactInfo || contactInfo.length > 150) throw new ValidationError("Contact info is required.");
-  const description = typeof data.description === "string" ? data.description.trim().slice(0, 1000) : "";
-  const status = data.status === "resolved" ? "resolved" : "open";
-  return { title, type, category, location, date: data.date, contactInfo, description, status };
+  const category = sanitizeText(data.category, 50, false, "Category") || "Other";
+  const location = sanitizeText(data.location, 150, true, "Location");
+  const date = data.date;
+  if (!isDate(date)) throw new ValidationError("Valid date (YYYY-MM-DD) is required.");
+  const time = sanitizeText(data.time, 30, false, "Time");
+  const description = sanitizeText(data.description, 2000, false, "Description");
+  const identifyingCharacteristics = sanitizeText(data.identifyingCharacteristics, 1000, false, "Identifying characteristics");
+  const contactPreference = sanitizeText(data.contactPreference, 50, false, "Contact preference") || "Email";
+  const contactInfo = sanitizeText(data.contactInfo, 200, true, "Contact info");
+  const imageUrl = typeof data.imageUrl === "string" && /^https?:\/\//i.test(data.imageUrl.trim()) ? data.imageUrl.trim().slice(0, 2000) : "";
+  const allowedStatus = ["pending_review", "published", "match_found", "claim_pending", "returned", "recovered", "closed", "rejected", "resolved", "open"];
+  const status = allowedStatus.includes(data.status) ? data.status : (data.status === "resolved" ? "resolved" : "published");
+  const visibility = data.visibility === "private" ? "private" : "public";
+
+  return {
+    title,
+    type,
+    category,
+    location,
+    date: String(date),
+    time,
+    description,
+    identifyingCharacteristics,
+    contactPreference,
+    contactInfo,
+    imageUrl,
+    status,
+    visibility
+  };
+}
+
+function validateLostFoundClaim(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Claim payload must be an object.");
+  const targetId = typeof data.targetId === "string" ? data.targetId.trim() : "";
+  if (!validRecordId(targetId)) throw new ValidationError("A valid target item ID is required.");
+  const claimantName = typeof data.claimantName === "string" ? data.claimantName.trim() : "";
+  if (!claimantName || claimantName.length > 120) throw new ValidationError("Your name is required.");
+  const reason = typeof data.reason === "string" ? data.reason.trim() : "";
+  if (!reason || reason.length > 2000) throw new ValidationError("A claim explanation is required.");
+  const identifyingDetails = typeof data.identifyingDetails === "string" ? data.identifyingDetails.trim() : "";
+  if (!identifyingDetails || identifyingDetails.length > 1000) throw new ValidationError("Private identifying details are required to verify ownership.");
+  const allowedStatus = ["pending", "under_review", "approved", "rejected", "completed"];
+  const status = allowedStatus.includes(data.status) ? data.status : "pending";
+  const contactPreference = typeof data.contactPreference === "string" ? data.contactPreference.trim().slice(0, 50) : "Email";
+  return { targetId, claimantName, reason, identifyingDetails, contactPreference, status };
 }
 
 function validateAnnouncement(data) {
@@ -845,6 +893,7 @@ module.exports = {
   validateJobListing,
   validateOpportunity,
   validateLostFoundItem,
+  validateLostFoundClaim,
   validateAnnouncement,
   validateFeedback,
   validateReport,

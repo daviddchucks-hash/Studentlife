@@ -14,6 +14,7 @@ const {
   validateJobListing,
   validateOpportunity,
   validateLostFoundItem,
+  validateLostFoundClaim,
   validateAnnouncement,
   validateFeedback,
   validateReport,
@@ -118,7 +119,8 @@ test("new entity validation functions sanitize and check payload inputs", () => 
   assert.equal(validateMarketplaceListing({ title: "Textbook", description: "Used book", price: "₦3000", contactInfo: "08012345678" }).price, "₦3000");
   assert.equal(validateJobListing({ title: "Web Dev Gig", description: "Build landing page", contactInfo: "email@test.com" }).type, "gig");
   assert.equal(validateOpportunity({ title: "Scholarship A", category: "Scholarship", description: "Full ride", deadline: "2026-09-01" }).title, "Scholarship A");
-  assert.equal(validateLostFoundItem({ title: "Keys", type: "lost", category: "Personal", location: "Library", date: "2026-05-01", contactInfo: "08000" }).type, "lost");
+  assert.equal(validateLostFoundItem({ title: "Keys", type: "lost", category: "Personal", location: "Library", date: "2026-05-01", contactInfo: "08000", status: "published" }).type, "lost");
+  assert.equal(validateLostFoundClaim({ targetId: "item123", claimantName: "Student A", reason: "It has my initials on it.", identifyingDetails: "Blue key holder with silver ring" }).status, "pending");
   assert.equal(validateAnnouncement({ title: "Exam Schedule Out", content: "Check portal", date: "2026-05-01", author: "Dean" }).author, "Dean");
   assert.equal(validateFeedback({ type: "complaint", subject: "Water issue", message: "No water in hostel" }).type, "complaint");
   assert.equal(validateReport({ targetType: "marketplace", targetId: "item123", reason: "Spam listing" }).targetType, "marketplace");
