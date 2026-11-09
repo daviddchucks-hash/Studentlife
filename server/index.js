@@ -4,6 +4,7 @@ const express = require("express");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
+const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
 const {
   definitions,
   getDefinition,
@@ -717,6 +718,7 @@ app.put("/api/profile", requireAuth, async (req, res, next) => {
     const existing = existingSnap.val() || {};
     const saved = { ...clean, updatedAt: now, createdAt: existing.createdAt || now };
     await profileRef.set(saved);
+    await refreshCourseIndex(database, req.user.uid);
     res.json({ profile: saved });
   } catch (error) {
     next(error);
@@ -1510,6 +1512,7 @@ app.post("/api/records/:type", requireAuth, async (req, res, next) => {
     const now = Date.now();
     const saved = { ...record, createdAt: now, updatedAt: now };
     const created = await userRef(req.user.uid, definition.path).push(saved);
+    if (["courses", "registration"].includes(req.params.type)) await refreshCourseIndex(database, req.user.uid);
     res.status(201).json({ id: created.key, record: saved });
   } catch (error) {
     next(error);
@@ -1527,6 +1530,7 @@ app.put("/api/records/:type/:id", requireAuth, async (req, res, next) => {
     const now = Date.now();
     const saved = { ...clean, createdAt: Number(existing.val().createdAt) || now, updatedAt: now };
     await recordRef.set(saved);
+    if (["courses", "registration"].includes(req.params.type)) await refreshCourseIndex(database, req.user.uid);
     res.json({ id: req.params.id, record: saved });
   } catch (error) {
     next(error);
@@ -1538,11 +1542,14 @@ app.delete("/api/records/:type/:id", requireAuth, async (req, res, next) => {
     const definition = getDefinition(req.params.type);
     if (!validRecordId(req.params.id)) return res.status(400).json({ error: "Record ID is invalid." });
     await userRef(req.user.uid, `${definition.path}/${req.params.id}`).remove();
+    if (["courses", "registration"].includes(req.params.type)) await refreshCourseIndex(database, req.user.uid);
     res.sendStatus(204);
   } catch (error) {
     next(error);
   }
 });
+
+registerCourseMateRoutes(app, { database, requireAuth, requireAdmin });
 
 app.use("/api", (req, res) => res.status(404).json({ error: "API route not found." }));
 app.use((error, req, res, next) => {

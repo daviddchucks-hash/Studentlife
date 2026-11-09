@@ -11,6 +11,7 @@ export function initNavigation(activePage = "") {
   const navLinks = [
     { href: "./dashboard.html", id: "dashboard", label: "Home" },
     { href: "./courses.html", id: "courses", label: "Academics" },
+    { href: "./coursemate.html", id: "coursemate", label: "CourseMate" },
     { href: "./calculators.html", id: "calculators", label: "Calculators" },
     { href: "./timetable.html", id: "timetable", label: "Timetable" },
     { href: "./study.html", id: "study", label: "Study" },

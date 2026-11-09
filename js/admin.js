@@ -35,6 +35,7 @@ export async function renderAdminModule(container) {
         <button class="admin-tab-btn" type="button" data-tab="directory">Directory</button>
         <button class="admin-tab-btn" type="button" data-tab="feedback">Feedback & Complaints</button>
         <button class="admin-tab-btn" type="button" data-tab="reports">Reports & Moderation</button>
+        <button class="admin-tab-btn" type="button" data-tab="coursemate">CourseMate Moderation</button>
       </div>
 
       <div id="admin-tab-content"></div>
@@ -425,6 +426,44 @@ export async function renderAdminModule(container) {
           };
         } catch {
           contentArea.innerHTML = '<p class="error-box">Could not load reports.</p>';
+        }
+        return;
+      }
+
+      if (tabName === "coursemate") {
+        try {
+          const res = await apiRequest("/api/admin/coursemate/reports");
+          const items = res.items || [];
+          contentArea.innerHTML = items.length ? items.map((report) => `
+            <article class="record-item">
+              <div>
+                <strong>${escapeHtml(report.targetType)} report${report.target?.title ? ` · ${escapeHtml(report.target.title)}` : ""}</strong>
+                <small>${escapeHtml(report.target?.authorName || "Student")} · ${new Date(report.createdAt).toLocaleString()}</small>
+                <p>${escapeHtml(report.reason)}</p>
+                ${report.target?.content ? `<p class="muted">${escapeHtml(report.target.content)}</p>` : ""}
+              </div>
+              <div class="inline-actions">
+                <button class="button button-quiet button-small" type="button" data-coursemate-report="${escapeHtml(report.id)}" data-action="dismiss">Dismiss</button>
+                <button class="record-delete" type="button" data-coursemate-report="${escapeHtml(report.id)}" data-action="remove-content">Remove content</button>
+              </div>
+            </article>
+          `).join("") : '<p class="empty-state">No CourseMate reports pending review.</p>';
+          contentArea.onclick = async (event) => {
+            const button = event.target.closest("[data-coursemate-report]");
+            if (!button) return;
+            if (button.dataset.action === "remove-content" && !confirm("Remove this reported content from CourseMate?")) return;
+            try {
+              await apiRequest(`/api/admin/coursemate/reports/${button.dataset.coursemateReport}`, {
+                method: "PUT",
+                body: { action: button.dataset.action }
+              });
+              await loadTab("coursemate");
+            } catch (error) {
+              contentArea.insertAdjacentHTML("afterbegin", `<div class="error-box">${escapeHtml(error.message || "Could not process this report.")}</div>`);
+            }
+          };
+        } catch (error) {
+          contentArea.innerHTML = `<p class="error-box">${escapeHtml(error.message || "Could not load CourseMate reports.")}</p>`;
         }
         return;
       }

@@ -305,6 +305,19 @@ async function loadNoteSyncPage() {
       ${renderSubmissions(submissions.items || [])}
     `;
 
+    const linkedNoteId = new URLSearchParams(window.location.search).get("note");
+    if (linkedNoteId) {
+      try {
+        const linkedNote = await apiRequest(`/api/notesync/library/${encodeURIComponent(linkedNoteId)}`);
+        const preview = document.querySelector("#notesync-library-preview");
+        if (preview) {
+          preview.innerHTML = `Shared approved note: <strong>${escapeHtml(linkedNote.item?.courseCode || "Note")}</strong><br>${escapeHtml(String(linkedNote.item?.notesText || "").slice(0, 900))}`;
+        }
+      } catch (error) {
+        renderStatus(error.message || "This shared NoteSync item is unavailable.", "error");
+      }
+    }
+
     const submitForm = document.querySelector("#notesync-submit-form");
     const messageBox = document.querySelector("#notesync-form-message");
     submitForm.addEventListener("submit", async (event) => {
@@ -423,4 +436,3 @@ async function loadNoteSyncPage() {
 
 initNavigation("notesync");
 loadNoteSyncPage();
-

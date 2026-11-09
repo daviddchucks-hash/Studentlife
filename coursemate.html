@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="description" content="Find classmates and collaborate on your registered AFIT courses.">
+  <title>CourseMate — AFITStudentLife</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+<body class="dashboard-page">
+  <header class="app-header"></header>
+  <main class="page-container">
+    <section class="page-header">
+      <p class="eyebrow">Academic Collaboration</p>
+      <h1>CourseMate</h1>
+      <p>Find classmates in your registered courses, work through questions, and plan group revision.</p>
+    </section>
+
+    <section id="coursemate-status" aria-live="polite"></section>
+    <section class="dashboard-section" style="margin-bottom:16px;">
+      <label class="inline-actions" style="align-items:center;">
+        <input id="coursemate-discoverable" type="checkbox">
+        <span>Allow classmates taking my courses to discover my public study profile.</span>
+      </label>
+      <p class="muted" style="margin:8px 0 0;">Your email, phone number, and student number are never shown in CourseMate.</p>
+    </section>
+
+    <nav class="tab-nav" id="coursemate-tabs" aria-label="CourseMate sections">
+      <button class="tab-btn active" type="button" data-section="students">Find Students</button>
+      <button class="tab-btn" type="button" data-section="groups">Study Groups</button>
+      <button class="tab-btn" type="button" data-section="questions">Questions</button>
+      <button class="tab-btn" type="button" data-section="partners">Study Partners</button>
+      <button class="tab-btn" type="button" data-section="notifications">Notifications</button>
+    </nav>
+    <section id="coursemate-panel" aria-live="polite">
+      <p class="muted">Loading CourseMate…</p>
+    </section>
+  </main>
+  <footer class="site-footer app-footer">
+    <a href="./dashboard.html">AFITStudentLife</a>
+    <span>Collaborate respectfully and keep academic discussions constructive.</span>
+  </footer>
+  <script type="module" src="./js/page-coursemate.js"></script>
+</body>
+</html>

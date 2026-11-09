@@ -54,6 +54,33 @@ The app includes a production-minded NoteSync module that keeps 100-level access
 
 The same integration also extends the existing timetable foundation into a lightweight LectureTrack capability: students can create lecture reminders and track attendance records using the same server-side validation and Firebase data layout without creating a separate application.
 
+## CourseMate (Version 3)
+
+CourseMate is part of the existing authenticated Express API and static frontend; it does not add another identity provider or direct client access to Firebase. Student discovery is opt-in. The server derives display name, department, level, bio, interests, and an HTTPS profile image from the existing profile, and never returns student number, email, or phone. Discovery, groups, questions, and partner matching are scoped to courses in a student's existing private course list.
+
+Logical Realtime Database paths are under `coursemate/`:
+
+- `profiles/{uid}` — discovery opt-in.
+- `userCourseIndex/{uid}` and `courseParticipants/{courseKey}/{uid}` — server-maintained indexes of existing personal/registration course records and non-sensitive profile fields.
+- `groups/{groupId}`, `groupsByCourse/{courseKey}/{groupId}`, `memberships/{groupId}/{uid}`, `joinRequests/`, and `groupInvitations/`.
+- `messages/{groupId}/{messageId}` — member-only, timestamped discussion messages, paginated through the API.
+- `questions/{questionId}`, `questionsByCourse/`, and `answers/{questionId}/{answerId}`.
+- `partnerProfiles/`, `partnerIndex/`, `partnerRequests/`, `partnerInbox/`, `partners/`, and `partnerBlocks/`.
+- `revisionSessions/{groupId}/{sessionId}` — group revision events and RSVP state.
+- `reports/` and `moderationLog/` — content reports and admin moderation actions.
+
+CourseMate uses these API routes (all require Firebase ID-token authentication unless noted; moderation routes also require the existing admin permission):
+
+- `GET|PUT /api/coursemate/profile`, `GET /api/coursemate/courses`, `GET /api/coursemate/students`, `GET /api/coursemate/students/:uid`.
+- `GET|POST /api/coursemate/groups`, `GET|PUT /api/coursemate/groups/:groupId`, plus membership, invitations, join-request, role, owner-transfer, messages, and revision-session subroutes.
+- `GET|POST /api/coursemate/questions`, `GET|PUT|DELETE /api/coursemate/questions/:questionId`, with answer and accepted-answer subroutes.
+- `GET|PUT /api/coursemate/partner-profile`, `GET /api/coursemate/partners`, and partner-request, block, connection subroutes.
+- `POST /api/coursemate/reports`, `GET /api/coursemate/notifications`, notification read route, and `GET|PUT /api/admin/coursemate/reports`.
+
+The new database paths inherit the root-deny Firebase rules and are accessed only by the Render Admin SDK. Existing users' course indexes must be initialized once after deployment using `npm run migrate:coursemate-index` with the same `FIREBASE_SERVICE_ACCOUNT_JSON` and `FIREBASE_DATABASE_URL` already configured for the API. The migration does not add environment variables or write to user profiles; it builds discovery indexes only from existing `courses/personal` and `courses/registration` records. New/changed courses and profiles are indexed on the existing authenticated API flows.
+
+The existing course entry feature permits students to maintain their own list and is not an institution-verified registrar catalogue. CourseMate does not accept a new course directly in its group/question forms, but its course eligibility necessarily reflects that existing source. Connecting to an authoritative registrar/course catalogue requires that service/data to be available. File attachments, an external calendar export, notification preference controls, and account suspension are not added; the existing repository has no verified upload storage, academic calendar API, notification preference model, or account moderation service. Approved NoteSync links are referenced by ID rather than copied.
+
 ## Local checks
 
 Run `npm test` to exercise API validation, calculator behavior, and syntax-check every browser JavaScript module as an ES module. To start the API locally, set the same Firebase Admin and database environment variables used on Render, then run `npm start`. Never commit `.env` files or service-account JSON.

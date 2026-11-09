@@ -21,7 +21,14 @@ const {
   validateNoteSyncSubmission,
   validateNoteSyncApplication,
   validateNoteSyncWithdrawal,
-  validateNoteSyncNotification
+  validateNoteSyncNotification,
+  validateCourseMateGroup,
+  validateCourseMateMessage,
+  validateCourseMateQuestion,
+  validateCourseMateAnswer,
+  validateCourseMatePartnerProfile,
+  validateCourseMateRevision,
+  validateCourseMateReport
 } = require("./validation");
 
 test("course records retain only allowed, validated fields", () => {
@@ -139,6 +146,83 @@ test("NoteSync validation rules enforce 100-level access and safe submission pay
     attachmentCount: 1,
     attachmentRefs: ["file-1"],
     status: "Pending Review"
+  });
+
+  test("CourseMate validates groups and discussion payloads without accepting client ownership", () => {
+    assert.deepEqual(validateCourseMateGroup({
+      groupName: "  Study Circle  ",
+      courseCode: "mth 101",
+      description: "Weekly revision",
+      rules: "Be respectful",
+      visibility: "private",
+      maxMembers: 12,
+      ownerUid: "forged"
+    }), {
+      groupName: "Study Circle",
+      courseCode: "MTH 101",
+      description: "Weekly revision",
+      rules: "Be respectful",
+      visibility: "private",
+      maxMembers: 12
+    });
+    assert.throws(() => validateCourseMateGroup({
+      groupName: "Group", courseCode: "CSC 101", visibility: "public", maxMembers: 1
+    }), /at least two members/);
+    assert.deepEqual(validateCourseMateMessage({ content: " Explain this step ", noteId: "note-123", userUid: "spoofed" }), {
+      content: "Explain this step",
+      noteId: "note-123",
+      replyTo: ""
+    });
+    assert.throws(() => validateCourseMateMessage({ content: " " }), /Message is required/);
+  });
+
+  test("CourseMate validates academic questions, partner profiles, revision sessions, and reports", () => {
+    assert.deepEqual(validateCourseMateQuestion({
+      title: "Newton's second law", details: "Explain with an example.", courseCode: "phy 101", topic: "Dynamics"
+    }), {
+      title: "Newton's second law", details: "Explain with an example.", courseCode: "PHY 101", topic: "Dynamics"
+    });
+    assert.deepEqual(validateCourseMateAnswer({ content: "Force equals mass times acceleration." }), {
+      content: "Force equals mass times acceleration."
+    });
+    assert.deepEqual(validateCourseMatePartnerProfile({
+      coursesSeeking: ["mth 101", "MTH 101"],
+      coursesOffering: ["PHY 101"],
+      method: "Online",
+      interests: "Calculus",
+      availability: "Weekends",
+      introduction: "Happy to study together.",
+      discoverable: true,
+      privateEmail: "not accepted"
+    }), {
+      coursesSeeking: ["MTH 101"],
+      coursesOffering: ["PHY 101"],
+      method: "Online",
+      interests: "Calculus",
+      availability: "Weekends",
+      introduction: "Happy to study together.",
+      discoverable: true
+    });
+    assert.deepEqual(validateCourseMateRevision({
+      title: "Problem set review",
+      courseCode: "csc 101",
+      topic: "Loops",
+      date: "2026-11-12",
+      start: "16:00",
+      end: "17:00",
+      location: "Library",
+      meetingUrl: "https://meet.example.edu/study"
+    }).courseCode, "CSC 101");
+    assert.throws(() => validateCourseMateRevision({
+      title: "Bad time", courseCode: "CSC 101", topic: "Loops", date: "2026-11-12",
+      start: "17:00", end: "16:00", location: "Library"
+    }), /end after it starts/);
+    assert.equal(validateCourseMateReport({
+      targetType: "message", targetId: "message-1", groupId: "group-1", reason: "Abuse"
+    }).targetType, "message");
+    assert.throws(() => validateCourseMateReport({
+      targetType: "answer", targetId: "answer-1", reason: "Abuse"
+    }), /Question ID is required/);
   });
   assert.equal(submission.noteType, "typed");
   assert.throws(() => validateNoteSyncSubmission({ ...submission, courseCode: "" }), /courseCode/);

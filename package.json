@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
+    "migrate:coursemate-index": "node server/migrate-coursemate-index.js",
     "test": "node --test server/*.test.js"
   },
   "dependencies": {

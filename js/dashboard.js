@@ -82,6 +82,7 @@ const mainPages = [
   { href: "./calculators.html", title: "1. Calculators & Converters", category: "Calculators", desc: "GPA, CGPA, scientific, physics, Ohm's law, and unit converters." },
   { href: "./timetable.html", title: "2. Timetable & Schedule", category: "Planning", desc: "Weekly schedule, today's classes, and overlap detection." },
   { href: "./courses.html", title: "3. Courses & Registration", category: "Academics", desc: "Registered course list, registration draft, and total units." },
+  { href: "./coursemate.html", title: "CourseMate", category: "Academics", desc: "Find classmates, study groups, course questions, study partners, and revision sessions." },
   { href: "./assignments.html", title: "4. Assignments & Deadlines", category: "Academics", desc: "Coursework tracker, assignment status, and due dates." },
   { href: "./exams.html", title: "5. Exams & Countdown", category: "Academics", desc: "Exam schedules, venues, and day countdowns." },
   { href: "./study.html", title: "6. Study & Timers", category: "Study", desc: "Study session logger, Pomodoro timer, and study plan generator." },

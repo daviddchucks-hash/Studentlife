@@ -713,6 +713,121 @@ function validateLectureTrackAttendance(data) {
   return { lecture, course, date, status, notes };
 }
 
+function validateCourseMateGroup(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Study group payload must be an object.");
+  const groupName = typeof data.groupName === "string" ? data.groupName.trim() : "";
+  const courseCode = typeof data.courseCode === "string" ? data.courseCode.trim().toUpperCase() : "";
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  const rules = typeof data.rules === "string" ? data.rules.trim() : "";
+  const visibility = ["public", "private"].includes(data.visibility) ? data.visibility : "";
+  const maxMembers = data.maxMembers === undefined || data.maxMembers === "" ? 0 : Number(data.maxMembers);
+  if (!groupName || groupName.length > 100) throw new ValidationError("Group name is required and must be 100 characters or fewer.");
+  if (!courseCode || courseCode.length > 40) throw new ValidationError("A valid course code is required.");
+  if (description.length > 1500) throw new ValidationError("Group description must be 1,500 characters or fewer.");
+  if (rules.length > 1500) throw new ValidationError("Group rules must be 1,500 characters or fewer.");
+  if (!visibility) throw new ValidationError("Choose public or private group visibility.");
+  if (!Number.isInteger(maxMembers) || maxMembers < 0 || maxMembers > 100) {
+    throw new ValidationError("Maximum membership must be 0 (unlimited) or a number from 2 to 100.");
+  }
+  if (maxMembers === 1) throw new ValidationError("A study group must allow at least two members.");
+  return { groupName, courseCode, description, rules, visibility, maxMembers };
+}
+
+function validateCourseMateMessage(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Discussion message payload must be an object.");
+  const content = typeof data.content === "string" ? data.content.trim() : "";
+  const noteId = typeof data.noteId === "string" ? data.noteId.trim() : "";
+  const replyTo = typeof data.replyTo === "string" ? data.replyTo.trim() : "";
+  if (!content || content.length > 3000) throw new ValidationError("Message is required and must be 3,000 characters or fewer.");
+  if (noteId && !validRecordId(noteId)) throw new ValidationError("Shared NoteSync note ID is invalid.");
+  if (replyTo && !validRecordId(replyTo)) throw new ValidationError("Reply target is invalid.");
+  return { content, noteId, replyTo };
+}
+
+function validateCourseMateQuestion(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Academic question payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const details = typeof data.details === "string" ? data.details.trim() : "";
+  const courseCode = typeof data.courseCode === "string" ? data.courseCode.trim().toUpperCase() : "";
+  const topic = typeof data.topic === "string" ? data.topic.trim() : "";
+  if (!title || title.length > 180) throw new ValidationError("Question title is required and must be 180 characters or fewer.");
+  if (!details || details.length > 5000) throw new ValidationError("Question details are required and must be 5,000 characters or fewer.");
+  if (!courseCode || courseCode.length > 40) throw new ValidationError("A valid course code is required.");
+  if (!topic || topic.length > 160) throw new ValidationError("Question topic is required and must be 160 characters or fewer.");
+  return { title, details, courseCode, topic };
+}
+
+function validateCourseMateAnswer(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Answer payload must be an object.");
+  const content = typeof data.content === "string" ? data.content.trim() : "";
+  if (!content || content.length > 5000) throw new ValidationError("Answer is required and must be 5,000 characters or fewer.");
+  return { content };
+}
+
+function validateCourseMatePartnerProfile(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Study partner profile payload must be an object.");
+  const normalizeCourses = (value, field) => {
+    if (!Array.isArray(value) || value.length > 20 || value.some((code) => typeof code !== "string")) {
+      throw new ValidationError(`${field} must contain up to 20 course codes.`);
+    }
+    return [...new Set(value.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  };
+  const coursesSeeking = normalizeCourses(data.coursesSeeking || [], "Courses seeking help with");
+  const coursesOffering = normalizeCourses(data.coursesOffering || [], "Courses offering help with");
+  const method = typeof data.method === "string" ? data.method.trim() : "";
+  const interests = typeof data.interests === "string" ? data.interests.trim() : "";
+  const availability = typeof data.availability === "string" ? data.availability.trim() : "";
+  const introduction = typeof data.introduction === "string" ? data.introduction.trim() : "";
+  if (method.length > 100 || interests.length > 300 || availability.length > 300 || introduction.length > 500) {
+    throw new ValidationError("Study partner profile fields exceed their allowed lengths.");
+  }
+  const discoverable = typeof data.discoverable === "boolean" ? data.discoverable : false;
+  return { coursesSeeking, coursesOffering, method, interests, availability, introduction, discoverable };
+}
+
+function validateCourseMateRevision(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Revision session payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const courseCode = typeof data.courseCode === "string" ? data.courseCode.trim().toUpperCase() : "";
+  const topic = typeof data.topic === "string" ? data.topic.trim() : "";
+  const date = isDate(data.date) ? data.date : "";
+  const start = typeof data.start === "string" ? data.start.trim() : "";
+  const end = typeof data.end === "string" ? data.end.trim() : "";
+  const location = typeof data.location === "string" ? data.location.trim() : "";
+  const meetingUrl = typeof data.meetingUrl === "string" ? data.meetingUrl.trim() : "";
+  const description = typeof data.description === "string" ? data.description.trim() : "";
+  if (!title || title.length > 160) throw new ValidationError("Revision session title is required.");
+  if (!courseCode || courseCode.length > 40) throw new ValidationError("A valid course code is required.");
+  if (!topic || topic.length > 160) throw new ValidationError("Revision topic is required.");
+  if (!date) throw new ValidationError("Revision date must be a valid YYYY-MM-DD date.");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end) || start >= end) {
+    throw new ValidationError("Revision session must have valid times and end after it starts.");
+  }
+  if (!location || location.length > 200 || meetingUrl.length > 500 || description.length > 1500) {
+    throw new ValidationError("Revision session location or description is invalid.");
+  }
+  if (meetingUrl && !/^https:\/\/\S+$/i.test(meetingUrl)) throw new ValidationError("Meeting links must use HTTPS.");
+  return { title, courseCode, topic, date, start, end, location, meetingUrl, description };
+}
+
+function validateCourseMateReport(data) {
+  if (!isPlainObject(data)) throw new ValidationError("CourseMate report payload must be an object.");
+  const targetType = ["group", "message", "question", "answer", "profile"].includes(data.targetType) ? data.targetType : "";
+  const targetId = typeof data.targetId === "string" ? data.targetId.trim() : "";
+  const groupId = typeof data.groupId === "string" ? data.groupId.trim() : "";
+  const questionId = typeof data.questionId === "string" ? data.questionId.trim() : "";
+  const courseCode = typeof data.courseCode === "string" ? data.courseCode.trim().toUpperCase() : "";
+  const reason = typeof data.reason === "string" ? data.reason.trim() : "";
+  if (!targetType || !validRecordId(targetId)) throw new ValidationError("Report target is invalid.");
+  if (groupId && !validRecordId(groupId)) throw new ValidationError("Report group ID is invalid.");
+  if (questionId && !validRecordId(questionId)) throw new ValidationError("Report question ID is invalid.");
+  if (!reason || reason.length > 1000) throw new ValidationError("Report reason is required and must be 1,000 characters or fewer.");
+  if (targetType === "message" && !groupId) throw new ValidationError("Group ID is required for a message report.");
+  if (targetType === "answer" && !questionId) throw new ValidationError("Question ID is required for an answer report.");
+  if (targetType === "profile" && !courseCode) throw new ValidationError("Course code is required for a profile report.");
+  return { targetType, targetId, groupId, questionId, courseCode, reason };
+}
+
 module.exports = {
   DAYS,
   ValidationError,
@@ -740,6 +855,13 @@ module.exports = {
   validateNoteSyncNotification,
   validateLectureTrackReminder,
   validateLectureTrackAttendance,
+  validateCourseMateGroup,
+  validateCourseMateMessage,
+  validateCourseMateQuestion,
+  validateCourseMateAnswer,
+  validateCourseMatePartnerProfile,
+  validateCourseMateRevision,
+  validateCourseMateReport,
   NOTE_SYNC_SUBMISSION_STATUSES,
   NOTE_SYNC_APPLICATION_STATUSES,
   NOTE_SYNC_WITHDRAWAL_STATUSES,
