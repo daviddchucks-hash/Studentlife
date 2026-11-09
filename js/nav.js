@@ -15,6 +15,7 @@ export function initNavigation(activePage = "") {
     { href: "./timetable.html", id: "timetable", label: "Timetable" },
     { href: "./study.html", id: "study", label: "Study" },
     { href: "./notes.html", id: "notes", label: "Notes" },
+    { href: "./notesync.html", id: "notesync", label: "NoteSync" },
     { href: "./formula-library.html", id: "formulas", label: "Formulas" },
     { href: "./campus-life.html", id: "campus-life", label: "Campus" },
     { href: "./opportunities.html", id: "opportunities", label: "Opportunities" },

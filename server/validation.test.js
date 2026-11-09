@@ -16,7 +16,12 @@ const {
   validateLostFoundItem,
   validateAnnouncement,
   validateFeedback,
-  validateReport
+  validateReport,
+  validateNoteSyncCourse,
+  validateNoteSyncSubmission,
+  validateNoteSyncApplication,
+  validateNoteSyncWithdrawal,
+  validateNoteSyncNotification
 } = require("./validation");
 
 test("course records retain only allowed, validated fields", () => {
@@ -110,4 +115,47 @@ test("new entity validation functions sanitize and check payload inputs", () => 
   assert.equal(validateAnnouncement({ title: "Exam Schedule Out", content: "Check portal", date: "2026-05-01", author: "Dean" }).author, "Dean");
   assert.equal(validateFeedback({ type: "complaint", subject: "Water issue", message: "No water in hostel" }).type, "complaint");
   assert.equal(validateReport({ targetType: "marketplace", targetId: "item123", reason: "Spam listing" }).targetType, "marketplace");
+});
+
+test("NoteSync validation rules enforce 100-level access and safe submission payloads", () => {
+  const course = validateNoteSyncCourse({ department: "Computer Science", level: "100", semester: "First Semester", session: "2025/2026", code: "CSC 101", title: "Introduction to Computing", active: true });
+  assert.equal(course.code, "CSC 101");
+  assert.throws(() => validateNoteSyncCourse({ department: "Math", level: "700", semester: "First Semester", session: "2025/2026", code: "MTH 101", title: "Math" }), /Select a valid academic level/);
+
+  const submission = validateNoteSyncSubmission({
+    studentUid: "uid-123",
+    studentName: "Ada Lovelace",
+    department: "Computer Science",
+    level: "100",
+    academicSession: "2025/2026",
+    semester: "First Semester",
+    courseCode: "CSC 101",
+    courseTitle: "Introduction to Computing",
+    lectureTopic: "Algorithms",
+    lectureWeek: "Week 2",
+    lectureDate: "2025-02-12",
+    notesText: "Sorting algorithm overview",
+    noteType: "typed",
+    attachmentCount: 1,
+    attachmentRefs: ["file-1"],
+    status: "Pending Review"
+  });
+  assert.equal(submission.noteType, "typed");
+  assert.throws(() => validateNoteSyncSubmission({ ...submission, courseCode: "" }), /courseCode/);
+
+  const application = validateNoteSyncApplication({
+    fullName: "Grace Hopper",
+    department: "Electrical Engineering",
+    currentLevel: "200",
+    email: "grace@example.com",
+    coursesRequested: "EEE 201",
+    justification: "Need broader access for revision notes."
+  });
+  assert.equal(application.status, "Submitted");
+
+  const withdrawal = validateNoteSyncWithdrawal({ coins: 200, bankInfo: "First Bank, 1234567890", nairaAmount: 1000 });
+  assert.equal(withdrawal.coins, 200);
+
+  const notification = validateNoteSyncNotification({ userUid: "uid-123", title: "Approved", message: "Your note was approved." });
+  assert.equal(notification.title, "Approved");
 });

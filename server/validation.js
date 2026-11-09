@@ -67,11 +67,151 @@ const definitions = {
   "formula-bookmarks": {
     path: "formulaBookmarks",
     fields: { formulaId: ["text", true, 128], formulaName: ["text", true, 150], subject: ["text", false, 100], formula: ["text", false, 300], topic: ["text", false, 100] }
+  },
+  "notesync-courses": {
+    path: "notesync/courses",
+    fields: {
+      department: ["text", true, 120],
+      level: ["text", true, 20],
+      semester: ["text", true, 50],
+      session: ["text", true, 60],
+      code: ["text", true, 40],
+      title: ["text", true, 200],
+      active: ["boolean", true],
+      createdAt: ["text", false, 30]
+    }
+  },
+  "notesync-submissions": {
+    path: "notesync/submissions",
+    fields: {
+      studentUid: ["text", true, 128],
+      studentName: ["text", true, 200],
+      department: ["text", true, 120],
+      level: ["text", true, 20],
+      academicSession: ["text", true, 60],
+      semester: ["text", true, 50],
+      courseCode: ["text", true, 40],
+      courseTitle: ["text", true, 200],
+      lectureTopic: ["text", true, 200],
+      lectureWeek: ["text", true, 40],
+      lectureDate: ["date", true],
+      notesText: ["text", true, 20000],
+      noteType: ["text", true, 40],
+      attachmentCount: ["positiveInteger", true],
+      attachmentRefs: ["text", false, 5000],
+      status: ["text", true, 60],
+      reviewNotes: ["text", false, 2000],
+      rejectionReason: ["text", false, 500],
+      duplicateHash: ["text", false, 128],
+      qualityCategory: ["text", false, 80],
+      rewardCoins: ["positiveInteger", false],
+      createdAt: ["text", false, 30],
+      updatedAt: ["text", false, 30]
+    }
+  },
+  "notesync-library": {
+    path: "notesync/library",
+    fields: {
+      submissionId: ["text", true, 128],
+      department: ["text", true, 120],
+      level: ["text", true, 20],
+      academicSession: ["text", true, 60],
+      semester: ["text", true, 50],
+      courseCode: ["text", true, 40],
+      courseTitle: ["text", true, 200],
+      lectureTopic: ["text", true, 200],
+      lectureWeek: ["text", true, 40],
+      lectureDate: ["date", true],
+      contributorName: ["text", true, 200],
+      notesPreview: ["text", true, 700],
+      fileSummary: ["text", false, 300],
+      qualityCategory: ["text", true, 80],
+      publishedAt: ["text", true, 30],
+      createdAt: ["text", false, 30]
+    }
+  },
+  "notesync-wallets": {
+    path: "notesync/wallets",
+    fields: {
+      studentUid: ["text", true, 128],
+      availableCoins: ["positiveInteger", true],
+      pendingRewards: ["positiveInteger", true],
+      totalEarned: ["positiveInteger", true],
+      totalRedeemed: ["positiveInteger", true],
+      totalAvailableValue: ["positiveInteger", true],
+      lastUpdated: ["text", true, 30],
+      withdrawnThisPeriod: ["positiveInteger", true]
+    }
+  },
+  "notesync-transactions": {
+    path: "notesync/transactions",
+    fields: {
+      studentUid: ["text", true, 128],
+      type: ["text", true, 80],
+      amount: ["positiveInteger", true],
+      submissionId: ["text", false, 128],
+      status: ["text", true, 40],
+      timestamp: ["text", true, 30],
+      reference: ["text", false, 200],
+      note: ["text", false, 500]
+    }
+  },
+  "notesync-withdrawals": {
+    path: "notesync/withdrawals",
+    fields: {
+      studentUid: ["text", true, 128],
+      coins: ["positiveInteger", true],
+      nairaAmount: ["positiveInteger", true],
+      bankInfo: ["text", true, 4000],
+      status: ["text", true, 40],
+      rejectionReason: ["text", false, 500],
+      requestDate: ["text", true, 30],
+      processedAt: ["text", false, 30],
+      paymentReference: ["text", false, 200]
+    }
+  },
+  "notesync-applications": {
+    path: "notesync/levelApplications",
+    fields: {
+      studentUid: ["text", true, 128],
+      fullName: ["text", true, 200],
+      studentNumber: ["text", false, 80],
+      department: ["text", true, 120],
+      currentLevel: ["text", true, 20],
+      email: ["text", true, 200],
+      phone: ["text", false, 30],
+      coursesRequested: ["text", true, 600],
+      justification: ["text", true, 2000],
+      status: ["text", true, 40],
+      adminNotes: ["text", false, 2000],
+      submittedAt: ["text", true, 30],
+      updatedAt: ["text", false, 30]
+    }
+  },
+  "notesync-notifications": {
+    path: "notesync/notifications",
+    fields: {
+      userUid: ["text", true, 128],
+      title: ["text", true, 200],
+      message: ["text", true, 1000],
+      read: ["boolean", true],
+      destination: ["text", false, 100],
+      createdAt: ["text", true, 30]
+    }
   }
 };
 
 const PRIORITIES = ["Low", "Medium", "High"];
 const REVISION_STATUSES = ["Not started", "In progress", "Completed"];
+const NOTE_SYNC_SUBMISSION_STATUSES = ["Draft", "Pending Review", "Under Review", "Approved", "Rejected", "Requires Correction"];
+const NOTE_SYNC_APPLICATION_STATUSES = ["Submitted", "Under Review", "Approved", "Rejected"];
+const NOTE_SYNC_WITHDRAWAL_STATUSES = ["Pending", "Processing", "Paid", "Rejected", "Cancelled"];
+const NOTE_SYNC_REWARD_CATEGORIES = {
+  "Basic acceptable notes": 5,
+  "Good notes": 10,
+  "Very good notes": 15,
+  "Excellent notes": 20
+};
 
 class ValidationError extends Error {
   constructor(message) {
@@ -424,6 +564,125 @@ function validateReport(data) {
   return { targetType, targetId: data.targetId, reason };
 }
 
+function validateNoteSyncCourse(data) {
+  if (!isPlainObject(data)) throw new ValidationError("NoteSync course payload must be an object.");
+  const department = typeof data.department === "string" ? data.department.trim() : "";
+  const level = typeof data.level === "string" ? data.level.trim() : "";
+  const semester = typeof data.semester === "string" ? data.semester.trim() : "";
+  const session = typeof data.session === "string" ? data.session.trim() : "";
+  const code = typeof data.code === "string" ? data.code.trim() : "";
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!department || department.length > 120) throw new ValidationError("Department is required.");
+  if (!level || !["100", "200", "300", "400", "500", "Postgraduate"].includes(level)) throw new ValidationError("Select a valid academic level.");
+  if (!semester || !["First Semester", "Second Semester"].includes(semester)) throw new ValidationError("Semester must be First or Second Semester.");
+  if (!session || session.length > 60) throw new ValidationError("Session is required.");
+  if (!code || code.length > 40) throw new ValidationError("Course code is required.");
+  if (!title || title.length > 200) throw new ValidationError("Course title is required.");
+  const active = typeof data.active === "boolean" ? data.active : true;
+  return { department, level, semester, session, code, title, active };
+}
+
+function validateNoteSyncSubmission(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Submission payload must be an object.");
+  const requiredString = (key, value, maxLen) => {
+    if (typeof value !== "string") throw new ValidationError(`${key} is required.`);
+    const cleaned = value.trim();
+    if (!cleaned || cleaned.length > maxLen) throw new ValidationError(`${key} is required and too long.`);
+    return cleaned;
+  };
+
+  const studentUid = requiredString("studentUid", data.studentUid, 128);
+  const studentName = requiredString("studentName", data.studentName, 200);
+  const department = requiredString("department", data.department, 120);
+  const level = requiredString("level", data.level, 20);
+  const academicSession = requiredString("academicSession", data.academicSession, 60);
+  const semester = requiredString("semester", data.semester, 50);
+  const courseCode = requiredString("courseCode", data.courseCode, 40);
+  const courseTitle = requiredString("courseTitle", data.courseTitle, 200);
+  const lectureTopic = requiredString("lectureTopic", data.lectureTopic, 200);
+  const lectureWeek = requiredString("lectureWeek", data.lectureWeek, 40);
+  if (!isDate(data.lectureDate)) throw new ValidationError("Lecture date must be a valid YYYY-MM-DD date.");
+  const notesText = requiredString("notesText", data.notesText, 20000);
+  const noteType = ["typed", "image", "pdf"].includes(data.noteType) ? data.noteType : "typed";
+  const attachmentCount = Number.isInteger(data.attachmentCount) ? Math.max(0, data.attachmentCount) : 0;
+  const attachmentRefs = Array.isArray(data.attachmentRefs) ? data.attachmentRefs.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 50) : [];
+  const status = NOTE_SYNC_SUBMISSION_STATUSES.includes(data.status) ? data.status : "Draft";
+  const reviewNotes = typeof data.reviewNotes === "string" ? data.reviewNotes.trim().slice(0, 2000) : "";
+  const rejectionReason = typeof data.rejectionReason === "string" ? data.rejectionReason.trim().slice(0, 500) : "";
+  const duplicateHash = typeof data.duplicateHash === "string" ? data.duplicateHash.trim().slice(0, 128) : "";
+  const qualityCategory = typeof data.qualityCategory === "string" ? data.qualityCategory.trim().slice(0, 80) : "";
+  const rewardCoins = Number.isInteger(data.rewardCoins) && data.rewardCoins >= 0 ? data.rewardCoins : 0;
+
+  return {
+    studentUid,
+    studentName,
+    department,
+    level,
+    academicSession,
+    semester,
+    courseCode,
+    courseTitle,
+    lectureTopic,
+    lectureWeek,
+    lectureDate: data.lectureDate,
+    notesText,
+    noteType,
+    attachmentCount,
+    attachmentRefs,
+    status,
+    reviewNotes,
+    rejectionReason,
+    duplicateHash,
+    qualityCategory,
+    rewardCoins
+  };
+}
+
+function validateNoteSyncApplication(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Application payload must be an object.");
+  const fullName = typeof data.fullName === "string" ? data.fullName.trim() : "";
+  const studentNumber = typeof data.studentNumber === "string" ? data.studentNumber.trim().slice(0, 80) : "";
+  const department = typeof data.department === "string" ? data.department.trim() : "";
+  const currentLevel = typeof data.currentLevel === "string" ? data.currentLevel.trim() : "";
+  const email = typeof data.email === "string" ? data.email.trim() : "";
+  const phone = typeof data.phone === "string" ? data.phone.trim().slice(0, 30) : "";
+  const coursesRequested = typeof data.coursesRequested === "string" ? data.coursesRequested.trim() : "";
+  const justification = typeof data.justification === "string" ? data.justification.trim() : "";
+  const studentUid = typeof data.studentUid === "string" ? data.studentUid.trim() : "";
+  if (!fullName || fullName.length > 200) throw new ValidationError("Full name is required.");
+  if (!department || department.length > 120) throw new ValidationError("Department is required.");
+  if (!currentLevel || currentLevel.length > 20) throw new ValidationError("Current level is required.");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ValidationError("A valid email is required.");
+  if (!coursesRequested || coursesRequested.length > 600) throw new ValidationError("List the courses you want included.");
+  if (!justification || justification.length > 2000) throw new ValidationError("Please explain why NoteSync would help your level.");
+  const status = NOTE_SYNC_APPLICATION_STATUSES.includes(data.status) ? data.status : "Submitted";
+  return { studentUid, fullName, studentNumber, department, currentLevel, email, phone, coursesRequested, justification, status };
+}
+
+function validateNoteSyncWithdrawal(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Withdrawal payload must be an object.");
+  const coins = Number.isInteger(data.coins) ? data.coins : NaN;
+  if (!Number.isInteger(coins) || coins < 200) throw new ValidationError("Minimum withdrawal is 200 AFT Coins.");
+  const bankInfo = typeof data.bankInfo === "string" ? data.bankInfo.trim() : "";
+  if (!bankInfo || bankInfo.length > 4000) throw new ValidationError("Bank details are required.");
+  const nairaAmount = Number.isInteger(data.nairaAmount) ? data.nairaAmount : 0;
+  const status = NOTE_SYNC_WITHDRAWAL_STATUSES.includes(data.status) ? data.status : "Pending";
+  return { coins, bankInfo, nairaAmount, status };
+}
+
+function validateNoteSyncNotification(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Notification payload must be an object.");
+  const userUid = typeof data.userUid === "string" ? data.userUid.trim() : "";
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const message = typeof data.message === "string" ? data.message.trim() : "";
+  if (!userUid || userUid.length > 128) throw new ValidationError("User ID is required.");
+  if (!title || title.length > 200) throw new ValidationError("Notification title is required.");
+  if (!message || message.length > 1000) throw new ValidationError("Notification message is required.");
+  const read = typeof data.read === "boolean" ? data.read : false;
+  const destination = typeof data.destination === "string" ? data.destination.trim().slice(0, 100) : "";
+  return { userUid, title, message, read, destination };
+}
+
 module.exports = {
   DAYS,
   ValidationError,
@@ -443,5 +702,14 @@ module.exports = {
   validateLostFoundItem,
   validateAnnouncement,
   validateFeedback,
-  validateReport
+  validateReport,
+  validateNoteSyncCourse,
+  validateNoteSyncSubmission,
+  validateNoteSyncApplication,
+  validateNoteSyncWithdrawal,
+  validateNoteSyncNotification,
+  NOTE_SYNC_SUBMISSION_STATUSES,
+  NOTE_SYNC_APPLICATION_STATUSES,
+  NOTE_SYNC_WITHDRAWAL_STATUSES,
+  NOTE_SYNC_REWARD_CATEGORIES
 };

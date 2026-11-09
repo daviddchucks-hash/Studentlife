@@ -20,7 +20,12 @@ const {
   validateLostFoundItem,
   validateAnnouncement,
   validateFeedback,
-  validateReport
+  validateReport,
+  validateNoteSyncCourse,
+  validateNoteSyncSubmission,
+  validateNoteSyncApplication,
+  validateNoteSyncWithdrawal,
+  validateNoteSyncNotification
 } = require("./validation");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -158,6 +163,355 @@ function daysFromToday(dateValue) {
 }
 
 app.get("/api/health", (req, res) => res.json({ ok: true, service: "afitstudentlife-api" }));
+
+async function getProfileSnapshot(uid) {
+  const snap = await database.ref(`users/${uid}/profile`).get();
+  return snap.val() || {};
+}
+
+function isNoteSyncEligible(profile = {}) {
+  const level = String(profile.level || "").trim();
+  return level === "100";
+}
+
+function coinsForQuality(category) {
+  const reward = {
+    "Basic acceptable notes": 5,
+    "Good notes": 10,
+    "Very good notes": 15,
+    "Excellent notes": 20
+  };
+  return reward[category] ?? 0;
+}
+
+async function ensureNoteSyncWallet(uid) {
+  const walletRef = database.ref(`notesync/wallets/${uid}`);
+  const snap = await walletRef.get();
+  if (snap.exists()) return snap.val();
+  const empty = {
+    studentUid: uid,
+    availableCoins: 0,
+    pendingRewards: 0,
+    totalEarned: 0,
+    totalRedeemed: 0,
+    totalAvailableValue: 0,
+    lastUpdated: Date.now(),
+    withdrawnThisPeriod: 0
+  };
+  await walletRef.set(empty);
+  return empty;
+}
+
+async function appendNotification(userUid, title, message, destination = "notesync") {
+  const ref = await database.ref("notesync/notifications").push({
+    userUid,
+    title,
+    message,
+    destination,
+    read: false,
+    createdAt: Date.now()
+  });
+  return ref.key;
+}
+
+app.get("/api/notesync/eligibility", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    const eligible = isNoteSyncEligible(profile);
+    res.json({
+      eligible,
+      level: String(profile.level || "").trim(),
+      department: String(profile.department || "").trim(),
+      noteSyncEnabled: true,
+      applicationOpen: !eligible,
+      message: eligible
+        ? "Eligible 100-level students can contribute and earn AFT Coins."
+        : "NoteSync is currently operating for 100-level students only. Other levels may apply for future integration."
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/course-catalog", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "NoteSync is restricted to 100-level students in this version." });
+    const snap = await database.ref("notesync/courses").get();
+    const items = snapshotToList(snap.val()).filter((course) => {
+      const matchesDepartment = !req.query.department || String(course.department || "").toLowerCase() === String(req.query.department).toLowerCase();
+      const matchesLevel = !req.query.level || String(course.level || "").toLowerCase() === String(req.query.level).toLowerCase();
+      const matchesSemester = !req.query.semester || String(course.semester || "").toLowerCase() === String(req.query.semester).toLowerCase();
+      const matchesSession = !req.query.session || String(course.session || "").toLowerCase() === String(req.query.session).toLowerCase();
+      return matchesDepartment && matchesLevel && matchesSemester && matchesSession && course.active !== false;
+    });
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notesync/applications", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    const payload = validateNoteSyncApplication({
+      ...req.body,
+      studentUid: req.user.uid,
+      fullName: req.body.fullName || profile.name || req.user.name || req.user.email || "",
+      department: req.body.department || profile.department || "",
+      currentLevel: req.body.currentLevel || profile.level || "",
+      email: req.body.email || req.user.email || "",
+      studentNumber: req.body.studentNumber || profile.studentNumber || ""
+    });
+    const ref = await database.ref("notesync/levelApplications").push({
+      ...payload,
+      studentUid: req.user.uid,
+      submittedAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    await appendNotification(req.user.uid, "Level application received", "Your NoteSync integration request has been submitted for review.");
+    res.status(201).json({ id: ref.key, record: { ...payload, studentUid: req.user.uid, submittedAt: Date.now(), updatedAt: Date.now() } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/submissions", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "Only 100-level students can access NoteSync submissions." });
+    const snap = await database.ref("notesync/submissions").get();
+    const items = snapshotToList(snap.val()).filter((submission) => submission.studentUid === req.user.uid);
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notesync/submissions", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "Only eligible 100-level students can upload NoteSync submissions." });
+    const payload = validateNoteSyncSubmission({
+      ...req.body,
+      studentUid: req.user.uid,
+      studentName: req.body.studentName || profile.name || req.user.name || req.user.email || "",
+      department: req.body.department || profile.department || "",
+      level: req.body.level || profile.level || "100",
+      attachmentCount: Number(req.body.attachmentCount || 0),
+      attachmentRefs: Array.isArray(req.body.attachmentRefs) ? req.body.attachmentRefs : [],
+      status: "Pending Review"
+    });
+    const duplicateKey = [req.user.uid, payload.courseCode, payload.lectureDate, payload.lectureWeek, payload.lectureTopic].join("|");
+    const existing = await database.ref("notesync/submissions").get();
+    const duplicates = snapshotToList(existing.val()).filter((item) => item.studentUid === req.user.uid && item.duplicateHash === duplicateKey);
+    if (duplicates.length > 0) {
+      return res.status(409).json({ error: "A matching note submission already exists for this course, lecture date, and topic." });
+    }
+    const now = Date.now();
+    const saved = {
+      ...payload,
+      duplicateHash: duplicateKey,
+      createdAt: now,
+      updatedAt: now,
+      reviewNotes: "",
+      rejectionReason: "",
+      qualityCategory: "",
+      rewardCoins: 0
+    };
+    const ref = await database.ref("notesync/submissions").push(saved);
+    await appendNotification(req.user.uid, "Submission received", "Your lecture note has been submitted and is now awaiting review.");
+    res.status(201).json({ id: ref.key, record: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/wallet", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "Only 100-level students have NoteSync rewards access." });
+    const wallet = await ensureNoteSyncWallet(req.user.uid);
+    const transactionsSnap = await database.ref("notesync/transactions").get();
+    const transactions = snapshotToList(transactionsSnap.val()).filter((tx) => tx.studentUid === req.user.uid);
+    transactions.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    res.json({ wallet, transactions: transactions.slice(0, 20), conversionRate: { base: 200, naira: 1000, label: "200 AFT Coins = ₦1,000" } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notesync/withdrawals", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "Only 100-level students can request withdrawals." });
+    const wallet = await ensureNoteSyncWallet(req.user.uid);
+    const payload = validateNoteSyncWithdrawal({
+      ...req.body,
+      nairaAmount: Math.round(((Number(req.body.coins) || 0) / 200) * 1000)
+    });
+    if (wallet.availableCoins < payload.coins) return res.status(400).json({ error: "Insufficient available AFT Coins for this withdrawal." });
+    const now = Date.now();
+    const withdrawal = {
+      studentUid: req.user.uid,
+      coins: payload.coins,
+      nairaAmount: payload.nairaAmount,
+      bankInfo: payload.bankInfo,
+      status: "Pending",
+      rejectionReason: "",
+      requestDate: now,
+      processedAt: "",
+      paymentReference: ""
+    };
+    const ref = await database.ref("notesync/withdrawals").push(withdrawal);
+    const nextWallet = {
+      ...wallet,
+      availableCoins: wallet.availableCoins - payload.coins,
+      pendingRewards: (wallet.pendingRewards || 0) + payload.coins,
+      lastUpdated: now
+    };
+    await database.ref(`notesync/wallets/${req.user.uid}`).set(nextWallet);
+    await database.ref("notesync/transactions").push({
+      studentUid: req.user.uid,
+      type: "withdrawal-request",
+      amount: payload.coins,
+      status: "Pending",
+      timestamp: now,
+      reference: ref.key,
+      note: "Withdrawal request submitted"
+    });
+    await appendNotification(req.user.uid, "Withdrawal request submitted", `A withdrawal request for ${payload.coins} AFT Coins is pending administrator review.`);
+    res.status(201).json({ id: ref.key, record: withdrawal });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/notesync/overview", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const [submissions, wallets, applications, withdrawals] = await Promise.all([
+      database.ref("notesync/submissions").get(),
+      database.ref("notesync/wallets").get(),
+      database.ref("notesync/levelApplications").get(),
+      database.ref("notesync/withdrawals").get()
+    ]);
+    const stats = {
+      contributors: new Set(snapshotToList(wallets.val()).map((item) => item.studentUid)).size,
+      totalSubmissions: snapshotToList(submissions.val()).length,
+      pendingSubmissions: snapshotToList(submissions.val()).filter((item) => item.status === "Pending Review").length,
+      approvedNotes: snapshotToList(submissions.val()).filter((item) => item.status === "Approved").length,
+      rejectedSubmissions: snapshotToList(submissions.val()).filter((item) => item.status === "Rejected").length,
+      totalCoinsIssued: snapshotToList(wallets.val()).reduce((sum, item) => sum + (Number(item.totalEarned) || 0), 0),
+      pendingWithdrawalRequests: snapshotToList(withdrawals.val()).filter((item) => item.status === "Pending" || item.status === "Processing").length,
+      activeApplications: snapshotToList(applications.val()).filter((item) => item.status === "Submitted" || item.status === "Under Review").length
+    };
+    res.json({ stats });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/notesync/submissions", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("notesync/submissions").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/notesync/submissions/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const ref = database.ref(`notesync/submissions/${id}`);
+    const existing = await ref.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Submission not found." });
+
+    const submission = existing.val();
+    const nextStatus = String(req.body.status || submission.status || "Pending Review");
+    const qualityCategory = String(req.body.qualityCategory || submission.qualityCategory || "");
+    const rewardCoins = coinsForQuality(qualityCategory || "Basic acceptable notes");
+    const reviewNotes = String(req.body.reviewNotes || submission.reviewNotes || "");
+    const rejectionReason = String(req.body.rejectionReason || submission.rejectionReason || "");
+    const updated = {
+      ...submission,
+      status: nextStatus,
+      qualityCategory: qualityCategory || submission.qualityCategory || "",
+      reviewNotes,
+      rejectionReason,
+      rewardCoins: nextStatus === "Approved" ? rewardCoins : 0,
+      updatedAt: Date.now()
+    };
+    await ref.set(updated);
+
+    if (nextStatus === "Approved") {
+      const walletRef = database.ref(`notesync/wallets/${submission.studentUid}`);
+      const wallet = await ensureNoteSyncWallet(submission.studentUid);
+      const nextWallet = {
+        ...wallet,
+        availableCoins: (wallet.availableCoins || 0) + rewardCoins,
+        totalEarned: (wallet.totalEarned || 0) + rewardCoins,
+        lastUpdated: Date.now()
+      };
+      await walletRef.set(nextWallet);
+      await database.ref("notesync/transactions").push({
+        studentUid: submission.studentUid,
+        type: "note-submission-reward",
+        amount: rewardCoins,
+        submissionId: id,
+        status: "Completed",
+        timestamp: Date.now(),
+        reference: `submission:${id}`,
+        note: `${qualityCategory || "Basic acceptable notes"}`
+      });
+      await appendNotification(submission.studentUid, "Submission approved", `Your note for ${submission.courseCode} was approved and ${rewardCoins} AFT Coins were awarded.`);
+    }
+
+    if (nextStatus === "Rejected") {
+      await appendNotification(submission.studentUid, "Submission rejected", rejectionReason || "Your submission was rejected after review.");
+    }
+
+    if (nextStatus === "Requires Correction") {
+      await appendNotification(submission.studentUid, "Submission needs correction", reviewNotes || "Please update the note to match the course and lecture details.");
+    }
+
+    res.json({ id, record: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/notesync/applications", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await database.ref("notesync/levelApplications").get();
+    const items = snapshotToList(snap.val());
+    items.sort((a, b) => (Number(b.submittedAt) || 0) - (Number(a.submittedAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/notesync/applications/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const ref = database.ref(`notesync/levelApplications/${id}`);
+    const existing = await ref.get();
+    if (!existing.exists()) return res.status(404).json({ error: "Application not found." });
+    const application = existing.val();
+    const status = String(req.body.status || application.status || "Submitted");
+    const adminNotes = String(req.body.adminNotes || application.adminNotes || "");
+    const updated = { ...application, status, adminNotes, updatedAt: Date.now() };
+    await ref.set(updated);
+    await appendNotification(application.studentUid, "Level application updated", `Your NoteSync level application status is now ${status}.`);
+    res.json({ id, record: updated });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/content/:section", async (req, res, next) => {
   const allowed = new Set(["academicContent", "formulas", "courses", "departments"]);
