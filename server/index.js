@@ -25,7 +25,9 @@ const {
   validateNoteSyncSubmission,
   validateNoteSyncApplication,
   validateNoteSyncWithdrawal,
-  validateNoteSyncNotification
+  validateNoteSyncNotification,
+  validateLectureTrackReminder,
+  validateLectureTrackAttendance
 } = require("./validation");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -284,6 +286,162 @@ app.get("/api/notesync/submissions", requireAuth, async (req, res, next) => {
     const items = snapshotToList(snap.val()).filter((submission) => submission.studentUid === req.user.uid);
     items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
     res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/library", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "NoteSync library access is restricted to 100-level students." });
+
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const department = String(req.query.department || profile.department || "").trim();
+    const level = String(req.query.level || profile.level || "").trim();
+    const semester = String(req.query.semester || "").trim();
+    const academicSession = String(req.query.academicSession || "").trim();
+
+    const snap = await database.ref("notesync/submissions").get();
+    const items = snapshotToList(snap.val())
+      .filter((submission) => submission.status === "Approved")
+      .filter((submission) => !department || String(submission.department || "").toLowerCase() === department.toLowerCase())
+      .filter((submission) => !level || String(submission.level || "").toLowerCase() === level.toLowerCase())
+      .filter((submission) => !semester || String(submission.semester || "").toLowerCase() === semester.toLowerCase())
+      .filter((submission) => !academicSession || String(submission.academicSession || "").toLowerCase() === academicSession.toLowerCase())
+      .filter((submission) => {
+        if (!search) return true;
+        const haystack = [
+          submission.courseCode,
+          submission.courseTitle,
+          submission.lectureTopic,
+          submission.department,
+          submission.level,
+          submission.semester,
+          submission.academicSession
+        ].join(" ").toLowerCase();
+        return haystack.includes(search);
+      });
+
+    items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/library/:id", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "NoteSync library access is restricted to 100-level students." });
+
+    const ref = database.ref(`notesync/submissions/${req.params.id}`);
+    const snap = await ref.get();
+    if (!snap.exists()) return res.status(404).json({ error: "Note not found." });
+    const item = snap.val();
+    if (item.status !== "Approved") return res.status(403).json({ error: "This note is not approved for the public library." });
+
+    const downloadUrl = Array.isArray(item.attachmentRefs) && item.attachmentRefs.length > 0
+      ? item.attachmentRefs[0]
+      : null;
+
+    res.json({
+      item: {
+        id: req.params.id,
+        ...item,
+        downloadUrl,
+        fileType: item.noteType || "typed",
+        createdAtLabel: item.createdAt ? new Date(Number(item.createdAt)).toISOString() : null
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/library/:id/download", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "NoteSync library access is restricted to 100-level students." });
+
+    const ref = database.ref(`notesync/submissions/${req.params.id}`);
+    const snap = await ref.get();
+    if (!snap.exists()) return res.status(404).json({ error: "Note not found." });
+    const item = snap.val();
+    if (item.status !== "Approved") return res.status(403).json({ error: "This note is not approved for download." });
+
+    const downloadUrl = Array.isArray(item.attachmentRefs) && item.attachmentRefs.length > 0
+      ? item.attachmentRefs[0]
+      : null;
+
+    if (downloadUrl) {
+      return res.json({
+        downloadUrl,
+        fileName: `${String(item.courseCode || "note").replace(/\s+/g, "-")}.bin`,
+        contentType: item.noteType === "pdf" ? "application/pdf" : item.noteType === "image" ? "image/jpeg" : "text/plain"
+      });
+    }
+
+    const fileName = `${String(item.courseCode || "note").replace(/\s+/g, "-")}.txt`;
+    res.json({
+      downloadUrl: null,
+      fileName,
+      contentType: "text/plain",
+      preview: String(item.notesText || "")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/lecture-track", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "LectureTrack is available only to eligible 100-level students." });
+
+    const [remindersSnap, attendanceSnap] = await Promise.all([
+      database.ref("notesync/lectureTrack/reminders").get(),
+      database.ref("notesync/lectureTrack/attendance").get()
+    ]);
+
+    res.json({
+      reminders: snapshotToList(remindersSnap.val()).filter((item) => item.userUid === req.user.uid),
+      attendance: snapshotToList(attendanceSnap.val()).filter((item) => item.userUid === req.user.uid)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notesync/lecture-track/reminders", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "LectureTrack is available only to eligible 100-level students." });
+
+    const payload = validateLectureTrackReminder({ ...req.body, userUid: req.user.uid });
+    const ref = await database.ref("notesync/lectureTrack/reminders").push({
+      ...payload,
+      userUid: req.user.uid,
+      createdAt: Date.now()
+    });
+    res.status(201).json({ id: ref.key, record: { ...payload, userUid: req.user.uid, createdAt: Date.now() } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notesync/lecture-track/attendance", requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfileSnapshot(req.user.uid);
+    if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "LectureTrack is available only to eligible 100-level students." });
+
+    const payload = validateLectureTrackAttendance({ ...req.body, userUid: req.user.uid });
+    const ref = await database.ref("notesync/lectureTrack/attendance").push({
+      ...payload,
+      userUid: req.user.uid,
+      createdAt: Date.now()
+    });
+    res.status(201).json({ id: ref.key, record: { ...payload, userUid: req.user.uid, createdAt: Date.now() } });
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,4 @@
-import { auth } from "./firebase-config.js";
+﻿import { auth } from "./firebase-config.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { API_BASE_URL } from "./app-config.js";
 
@@ -36,7 +36,7 @@ export async function apiRequest(path, { method = "GET", body, authenticated = t
     if (!auth.currentUser) await waitForInitialAuthState();
     const user = auth.currentUser;
     if (!user) throw new Error("Sign in to continue.");
-    headers.Authorization = `Bearer ${await user.getIdToken()}`;
+    headers.Authorization = "Bearer " + (await user.getIdToken());
   }
 
   let response;

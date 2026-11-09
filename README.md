@@ -48,6 +48,12 @@ The dashboard includes GPA, CGPA, semester weighted-average, grade, and course-u
 
 The calculators use a common 5-point grade-point input scale and indicative score boundaries. Students should verify their programme's grading scale with their department.
 
+## NoteSync and LectureTrack
+
+The app includes a production-minded NoteSync module that keeps 100-level access enforcement on the backend. Approved lecture notes are exposed through the authenticated library API and filtered by department, level, semester, and academic session, while submission review, AFT Coin rewards, withdrawals, and admin approval remain in the same Express/Firebase architecture.
+
+The same integration also extends the existing timetable foundation into a lightweight LectureTrack capability: students can create lecture reminders and track attendance records using the same server-side validation and Firebase data layout without creating a separate application.
+
 ## Local checks
 
 Run `npm test` to exercise API validation, calculator behavior, and syntax-check every browser JavaScript module as an ES module. To start the API locally, set the same Firebase Admin and database environment variables used on Render, then run `npm start`. Never commit `.env` files or service-account JSON.

@@ -683,6 +683,36 @@ function validateNoteSyncNotification(data) {
   return { userUid, title, message, read, destination };
 }
 
+function validateLectureTrackReminder(data) {
+  if (!isPlainObject(data)) throw new ValidationError("LectureTrack reminder payload must be an object.");
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const lecture = typeof data.lecture === "string" ? data.lecture.trim() : "";
+  const day = typeof data.day === "string" ? data.day.trim() : "";
+  const time = typeof data.time === "string" ? data.time.trim() : "";
+  const venue = typeof data.venue === "string" ? data.venue.trim().slice(0, 150) : "";
+  if (!title || title.length > 200) throw new ValidationError("Reminder title is required.");
+  if (!lecture || lecture.length > 200) throw new ValidationError("Lecture/course name is required.");
+  if (!day || !DAYS.includes(day)) throw new ValidationError("Reminder day must be a valid weekday.");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new ValidationError("Reminder time must be a valid 24-hour time.");
+  const channel = ["push", "email", "sms"].includes(data.channel) ? data.channel : "push";
+  const leadMinutes = Number.isInteger(data.leadMinutes) ? Math.min(Math.max(data.leadMinutes, 5), 1_440) : 15;
+  const active = typeof data.active === "boolean" ? data.active : true;
+  return { title, lecture, day, time, venue, channel, leadMinutes, active };
+}
+
+function validateLectureTrackAttendance(data) {
+  if (!isPlainObject(data)) throw new ValidationError("LectureTrack attendance payload must be an object.");
+  const lecture = typeof data.lecture === "string" ? data.lecture.trim() : "";
+  const course = typeof data.course === "string" ? data.course.trim() : "";
+  const date = isDate(data.date) ? data.date : "";
+  const status = ["Present", "Absent", "Excused", "Pending"].includes(data.status) ? data.status : "Pending";
+  const notes = typeof data.notes === "string" ? data.notes.trim().slice(0, 500) : "";
+  if (!lecture || lecture.length > 200) throw new ValidationError("Lecture name is required.");
+  if (!course || course.length > 200) throw new ValidationError("Course name is required.");
+  if (!date) throw new ValidationError("Attendance date must be a valid YYYY-MM-DD date.");
+  return { lecture, course, date, status, notes };
+}
+
 module.exports = {
   DAYS,
   ValidationError,
@@ -708,6 +738,8 @@ module.exports = {
   validateNoteSyncApplication,
   validateNoteSyncWithdrawal,
   validateNoteSyncNotification,
+  validateLectureTrackReminder,
+  validateLectureTrackAttendance,
   NOTE_SYNC_SUBMISSION_STATUSES,
   NOTE_SYNC_APPLICATION_STATUSES,
   NOTE_SYNC_WITHDRAWAL_STATUSES,
