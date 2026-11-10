@@ -426,6 +426,31 @@ function snapshotToList(value) {
   return Object.entries(value).map(([id, item]) => ({ ...item, id }));
 }
 
+function normalizeMatricNumber(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value !== "string") throw new ValidationError("Matriculation number must be text.");
+  const cleaned = value.trim().replace(/\s+/g, "").toUpperCase();
+  return cleaned;
+}
+
+function validateMatricNumber(value) {
+  const normalized = normalizeMatricNumber(value);
+  if (!normalized) return "";
+  const pattern = new RegExp(process.env.MATRIC_NUMBER_PATTERN || "^[A-Z]{2,10}\\/\\d{2,4}\\/\\d{1,10}$");
+  if (!pattern.test(normalized)) {
+    throw new ValidationError("Enter a valid matriculation number, for example AFIT/23/1234.");
+  }
+  return normalized;
+}
+
+function validateTextMessage(value, maxLength = 2000) {
+  if (typeof value !== "string") throw new ValidationError("Message text must be text.");
+  const cleaned = value.trim();
+  if (!cleaned) throw new ValidationError("Message cannot be empty.");
+  if (cleaned.length > maxLength) throw new ValidationError(`Message must be ${maxLength} characters or fewer.`);
+  return cleaned;
+}
+
 function validateProfile(data) {
   if (!isPlainObject(data)) throw new ValidationError("Profile payload must be an object.");
   const cleanStr = (val, maxLen) => {
@@ -433,7 +458,7 @@ function validateProfile(data) {
     if (typeof val !== "string") throw new ValidationError("Profile fields must be strings.");
     return val.trim().slice(0, maxLen);
   };
-  return {
+  const profile = {
     name: cleanStr(data.name, 100),
     department: cleanStr(data.department, 100),
     level: cleanStr(data.level, 50),
@@ -442,6 +467,11 @@ function validateProfile(data) {
     bio: cleanStr(data.bio, 500),
     profilePicture: cleanStr(data.profilePicture, 2000)
   };
+  if (Object.prototype.hasOwnProperty.call(data, "matricNumber") || Object.prototype.hasOwnProperty.call(data, "matricVerified")) {
+    profile.matricNumber = validateMatricNumber(data.matricNumber || "");
+    profile.matricVerified = typeof data.matricVerified === "boolean" ? data.matricVerified : false;
+  }
+  return profile;
 }
 
 function validateDirectoryItem(data) {

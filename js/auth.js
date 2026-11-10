@@ -1,4 +1,5 @@
-import { auth } from "./firebase-config.js";
+﻿import { auth } from "./firebase-config.js";
+import { API_BASE_URL } from "./app-config.js";
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -41,19 +42,44 @@ form.addEventListener("submit", async (event) => {
   const email = String(values.get("email")).trim().toLowerCase();
   const password = String(values.get("password"));
   const name = String(values.get("name") || "").trim();
+  const matricNumber = String(values.get("matricNumber") || "").trim();
+
   if (isSignup && password !== String(values.get("confirmPassword"))) {
     showMessage("The passwords do not match.");
+    return;
+  }
+
+  if (isSignup && !/^[A-Za-z]{2,10}\/[0-9]{2,4}\/[0-9]{1,10}$/.test(matricNumber.replace(/\s+/g, "").toUpperCase())) {
+    showMessage("Enter a valid matriculation number, for example AFIT/23/1234.");
     return;
   }
 
   submitButton.disabled = true;
   isSubmitting = true;
   submitButton.textContent = isSignup ? "Creating account…" : "Signing in…";
+
   try {
     await setPersistence(auth, browserLocalPersistence);
+
     if (isSignup) {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       if (name) await updateProfile(credential.user, { displayName: name });
+
+      const idToken = await credential.user.getIdToken();
+      const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/api/profile/matric`, {
+        method: "PUT",
+        headers: {
+          Authorization: "Bearer " + idToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ matricNumber, verified: false })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "We could not save your matriculation number.");
+      }
+
       window.location.replace("./dashboard.html");
     } else {
       await signInWithEmailAndPassword(auth, email, password);
