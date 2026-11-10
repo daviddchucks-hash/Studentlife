@@ -155,6 +155,24 @@ async function readRecords(uid, path) {
   return snapshotToList(snapshot.val());
 }
 
+function validUid(uid) {
+  return typeof uid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(uid);
+}
+
+const messageSearchWindows = new Map();
+
+function allowMessageSearch(key) {
+  const now = Date.now();
+  const state = messageSearchWindows.get(key) || { startedAt: now, count: 0 };
+  if (now - state.startedAt >= 60_000) {
+    state.startedAt = now;
+    state.count = 0;
+  }
+  state.count += 1;
+  messageSearchWindows.set(key, state);
+  return state.count <= 10;
+}
+
 function sortByDate(items, key) {
   return items.sort((a, b) => String(a[key] || "").localeCompare(String(b[key] || "")));
 }
