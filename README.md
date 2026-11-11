@@ -4,7 +4,7 @@ AFITStudentLife is a lightweight student platform for AFIT. The frontend is plai
 
 ## Current deployment configuration
 
-The Firebase web-app config is in `js/firebase-config.js`; its API key is public client configuration, not an Admin credential. The production Render API URL is configured in `js/app-config.js` as `https://studentlife-r8k1.onrender.com`. No Realtime Database URL or service-account private key was provided, and neither is guessed or committed.
+The Firebase web-app config is in `js/firebase-config.js`; its API key is public client configuration, not an Admin credential. The production Render API URL is configured in `js/app-config.js` as `https://studentlife-1-zcuc.onrender.com`. No Realtime Database URL or service-account private key was provided, and neither is guessed or committed.
 
 ## Set up Firebase
 
@@ -18,11 +18,11 @@ The public web-app configuration is used only for client-side Firebase Authentic
 
 ## Deploy the API to Render
 
-1. In Render, create a **Blueprint** from this GitHub repository and use `render.yaml`.
-2. Set the prompted Render environment values:
+1. Open the existing Render Web Service at `https://studentlife-1-zcuc.onrender.com`. Do not create another service or replace it with a new Blueprint.
+2. In that service's **Environment** settings, verify the existing deployment matches `render.yaml` and set:
    - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete Firebase service-account JSON, stored only in Render.
    - `FIREBASE_DATABASE_URL`: the exact Realtime Database URL copied from Firebase Console.
-   - `FRONTEND_ORIGINS`: `https://daviddchucks-hash.github.io` (already specified in the Blueprint; add a local development origin only when needed).
+   - `FRONTEND_ORIGINS`: `https://daviddchucks-hash.github.io` (already specified in `render.yaml`; add a local development origin only when needed).
 3. The current Render URL is already set as `API_BASE_URL` in `js/app-config.js`. If the service URL changes, update that public URL (without a trailing slash) and push the frontend change.
 4. The Render health check is `GET /api/health`. Authenticated routes require `Authorization: Bearer <Firebase ID token>`.
 

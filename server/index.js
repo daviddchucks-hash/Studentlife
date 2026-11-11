@@ -5,6 +5,7 @@ const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
+const { applySubmissionReward } = require("./notesync-rewards");
 const {
   definitions,
   getDefinition,
@@ -611,41 +612,67 @@ app.put("/api/admin/notesync/submissions/:id", requireAuth, requireAdmin, async 
     const submission = existing.val();
     const nextStatus = String(req.body.status || submission.status || "Pending Review");
     const qualityCategory = String(req.body.qualityCategory || submission.qualityCategory || "");
-    const rewardCoins = coinsForQuality(qualityCategory || "Basic acceptable notes");
+    const rewardCategory = qualityCategory || "Basic acceptable notes";
+    const rewardCoins = coinsForQuality(rewardCategory);
     const reviewNotes = String(req.body.reviewNotes || submission.reviewNotes || "");
     const rejectionReason = String(req.body.rejectionReason || submission.rejectionReason || "");
+    let rewardCommitted = false;
+    let rewardMarkerPresent = submission.rewardIssued === true;
+    let rewardRecorded = rewardMarkerPresent || (
+      submission.status === "Approved" && Number(submission.rewardCoins) > 0
+    );
+    let issuedRewardCoins = Number(submission.rewardCoins) || 0;
+    let issuedRewardCategory = submission.rewardQualityCategory || submission.qualityCategory || "";
+    if (nextStatus === "Approved" && !rewardRecorded) {
+      const walletRef = database.ref(`notesync/wallets/${submission.studentUid}`);
+      const wallet = await ensureNoteSyncWallet(submission.studentUid);
+      const now = Date.now();
+      const result = await walletRef.transaction((current) =>
+        applySubmissionReward(current || wallet, id, rewardCoins, rewardCategory, now)
+      );
+      rewardCommitted = result.committed;
+      const rewardMarker = result.snapshot.val()?.rewardedSubmissionIds?.[id];
+      rewardMarkerPresent = Boolean(rewardMarker);
+      rewardRecorded = rewardMarkerPresent;
+      issuedRewardCoins = Number(rewardMarker?.amount) || 0;
+      issuedRewardCategory = rewardMarker?.qualityCategory || rewardCategory;
+    }
+
     const updated = {
       ...submission,
       status: nextStatus,
       qualityCategory: qualityCategory || submission.qualityCategory || "",
       reviewNotes,
       rejectionReason,
-      rewardCoins: nextStatus === "Approved" ? rewardCoins : 0,
+      rewardCoins: rewardRecorded ? issuedRewardCoins : 0,
+      rewardQualityCategory: rewardRecorded ? issuedRewardCategory : submission.rewardQualityCategory || "",
+      rewardIssued: rewardRecorded,
       updatedAt: Date.now()
     };
     await ref.set(updated);
 
-    if (nextStatus === "Approved") {
-      const walletRef = database.ref(`notesync/wallets/${submission.studentUid}`);
-      const wallet = await ensureNoteSyncWallet(submission.studentUid);
-      const nextWallet = {
-        ...wallet,
-        availableCoins: (wallet.availableCoins || 0) + rewardCoins,
-        totalEarned: (wallet.totalEarned || 0) + rewardCoins,
-        lastUpdated: Date.now()
-      };
-      await walletRef.set(nextWallet);
-      await database.ref("notesync/transactions").push({
+    if (rewardMarkerPresent) {
+      await database.ref(`notesync/transactions/submission-${id}`).set({
         studentUid: submission.studentUid,
         type: "note-submission-reward",
-        amount: rewardCoins,
+        amount: issuedRewardCoins,
         submissionId: id,
         status: "Completed",
         timestamp: Date.now(),
         reference: `submission:${id}`,
-        note: `${qualityCategory || "Basic acceptable notes"}`
+        note: issuedRewardCategory || "Basic acceptable notes"
       });
-      await appendNotification(submission.studentUid, "Submission approved", `Your note for ${submission.courseCode} was approved and ${rewardCoins} AFT Coins were awarded.`);
+    }
+
+    if (rewardCommitted) {
+      await database.ref(`notesync/notifications/reward-${submission.studentUid}-${id}`).set({
+        userUid: submission.studentUid,
+        title: "Submission approved",
+        message: `Your note for ${submission.courseCode} was approved and ${issuedRewardCoins} AFT Coins were awarded.`,
+        destination: "notesync",
+        read: false,
+        createdAt: Date.now()
+      });
     }
 
     if (nextStatus === "Rejected") {
