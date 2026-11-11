@@ -436,9 +436,15 @@ function normalizeMatricNumber(value) {
 function validateMatricNumber(value) {
   const normalized = normalizeMatricNumber(value);
   if (!normalized) return "";
-  const pattern = new RegExp(process.env.MATRIC_NUMBER_PATTERN || "^[A-Z]{2,10}\\/\\d{2,4}\\/\\d{1,10}$");
+  if (normalized.length > 64) throw new ValidationError("Matriculation number is too long.");
+  let pattern;
+  try {
+    pattern = new RegExp(process.env.MATRIC_NUMBER_PATTERN || "^[A-Z0-9][A-Z0-9./_-]{0,63}$");
+  } catch {
+    throw new Error("MATRIC_NUMBER_PATTERN must be a valid regular expression.");
+  }
   if (!pattern.test(normalized)) {
-    throw new ValidationError("Enter a valid matriculation number, for example AFIT/23/1234.");
+    throw new ValidationError("Enter a valid matriculation number using letters, numbers, or / . _ - separators.");
   }
   return normalized;
 }
@@ -919,6 +925,9 @@ module.exports = {
   isDate,
   snapshotToList,
   validRecordId,
+  normalizeMatricNumber,
+  validateMatricNumber,
+  validateTextMessage,
   validateRecord,
   validateFormula,
   validateProfile,

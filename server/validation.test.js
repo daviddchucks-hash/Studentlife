@@ -4,6 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   validRecordId,
+  normalizeMatricNumber,
+  validateMatricNumber,
+  validateTextMessage,
   validateRecord,
   snapshotToList,
   validateFormula,
@@ -31,6 +34,21 @@ const {
   validateCourseMateRevision,
   validateCourseMateReport
 } = require("./validation");
+
+test("matriculation numbers normalize consistently without assuming one institution format", () => {
+  assert.equal(normalizeMatricNumber(" afit / 23 / 1234 "), "AFIT/23/1234");
+  assert.equal(validateMatricNumber(" 2026-1234 "), "2026-1234");
+  assert.equal(validateMatricNumber(""), "");
+  assert.throws(() => validateMatricNumber("bad value!"), /letters, numbers/);
+  assert.throws(() => validateMatricNumber("A".repeat(65)), /too long/);
+});
+
+test("text message validation rejects empty and oversized payloads", () => {
+  assert.equal(validateTextMessage("  Hello student  "), "Hello student");
+  assert.throws(() => validateTextMessage("  "), /cannot be empty/);
+  assert.throws(() => validateTextMessage("x".repeat(5), 4), /4 characters or fewer/);
+  assert.throws(() => validateTextMessage({ text: "hello" }), /must be text/);
+});
 
 test("course records retain only allowed, validated fields", () => {
   assert.deepEqual(validateRecord("courses", { code: " MTH 101 ", name: "Mathematics", units: 3 }), {

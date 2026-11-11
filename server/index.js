@@ -6,6 +6,8 @@ const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
+const { registerMessagingRoutes } = require("./messaging-routes");
+const { matricLookupKey } = require("./messaging");
 const { applySubmissionReward, resolveWithdrawalWallet } = require("./notesync-rewards");
 const { isPublicLostFoundItem, publicLostFoundItem } = require("./public-data");
 const {
@@ -13,6 +15,7 @@ const {
   getDefinition,
   snapshotToList,
   validRecordId,
+  validateMatricNumber,
   validateRecord,
   validateFormula,
   validateProfile,
@@ -166,6 +169,7 @@ function validUid(uid) {
 }
 
 const messageSearchWindows = new Map();
+const messageActionWindows = new Map();
 
 function allowMessageSearch(key) {
   const now = Date.now();
@@ -177,6 +181,17 @@ function allowMessageSearch(key) {
   state.count += 1;
   messageSearchWindows.set(key, state);
   return state.count <= 10;
+}
+
+function allowMessageAction(key, limit, windowMs = 60_000) {
+  const now = Date.now();
+  const state = messageActionWindows.get(key);
+  if (!state || now - state.startedAt >= windowMs) {
+    messageActionWindows.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  state.count += 1;
+  return state.count <= limit;
 }
 
 function sortByDate(items, key) {
@@ -1054,17 +1069,18 @@ app.get("/api/profile", requireAuth, async (req, res, next) => {
   }
 });
 
-async function findUserByMatricNumber(matricNumber) {
+async function findUsersByMatricNumber(matricNumber) {
   const normalized = String(matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
-  if (!normalized) return null;
+  if (!normalized) return [];
   const snapshot = await database.ref("users").get();
   const users = snapshot.val() || {};
+  const matches = [];
   for (const [uid, entry] of Object.entries(users)) {
     const profile = entry && entry.profile ? entry.profile : {};
     const value = String(profile.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
-    if (value === normalized) return { uid, profile };
+    if (value === normalized) matches.push({ uid, profile });
   }
-  return null;
+  return matches;
 }
 
 app.get("/api/profile/matric", requireAuth, async (req, res, next) => {
@@ -1095,15 +1111,15 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
       ? requestedVerified
       : Boolean(existing.matricVerified && normalized && normalized === previousMatric);
     if (normalized) {
-      const match = await findUserByMatricNumber(normalized);
-      if (match && match.uid !== req.user.uid) {
+      const matches = await findUsersByMatricNumber(normalized);
+      if (matches.some((match) => match.uid !== req.user.uid)) {
         return res.status(409).json({ error: "This matriculation number is already registered to another student." });
       }
     }
     const saved = { ...existing, matricNumber: normalized, matricVerified: nextVerified, updatedAt: Date.now() };
     let reservedLookup = false;
     if (normalized && nextVerified) {
-      const lookupRef = database.ref(`matricLookup/${normalized}`);
+      const lookupRef = database.ref(`matricLookup/${matricLookupKey(normalized)}`);
       const lookupResult = await lookupRef.transaction((uid) => uid && uid !== req.user.uid ? undefined : req.user.uid);
       if (!lookupResult.committed) {
         return res.status(409).json({ error: "This matriculation number is already verified for another student." });
@@ -1114,15 +1130,15 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
       await profileRef.set(saved);
     } catch (error) {
       if (reservedLookup && normalized !== previousMatric) {
-        await database.ref(`matricLookup/${normalized}`).transaction((uid) => uid === req.user.uid ? null : undefined);
+        await database.ref(`matricLookup/${matricLookupKey(normalized)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
       }
       throw error;
     }
     if (previousMatric && previousMatric !== normalized) {
-      await database.ref(`matricLookup/${previousMatric}`).transaction((uid) => uid === req.user.uid ? null : undefined);
+      await database.ref(`matricLookup/${matricLookupKey(previousMatric)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
     }
     if (normalized && !nextVerified) {
-      await database.ref(`matricLookup/${normalized}`).transaction((uid) => uid === req.user.uid ? null : undefined);
+      await database.ref(`matricLookup/${matricLookupKey(normalized)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
     }
     res.json({ profile: saved });
   } catch (error) {
@@ -1146,161 +1162,13 @@ app.put("/api/profile", requireAuth, async (req, res, next) => {
   }
 });
 
-app.get("/api/messages/search", requireAuth, async (req, res, next) => {
-  try {
-    const matricNumber = String(req.query.matric || "").trim();
-    if (!matricNumber) return res.status(400).json({ error: "Enter a valid matriculation number to search." });
-    if (!allowMessageSearch(req.user.uid)) {
-      return res.status(429).json({ error: "Too many search attempts. Please wait a moment and try again." });
-    }
-    const normalized = validateMatricNumber(matricNumber);
-    const matched = await database.ref(`matricLookup/${normalized}`).get();
-    if (!matched.exists()) return res.status(404).json({ error: "No verified student matches that matriculation number." });
-    const otherUid = matched.val();
-    if (otherUid === req.user.uid) return res.status(400).json({ error: "You cannot start a conversation with yourself." });
-    const otherProfileSnap = await database.ref(`users/${otherUid}/profile`).get();
-    const otherProfile = otherProfileSnap.val() || {};
-    if (otherProfile.matricVerified !== true) return res.status(404).json({ error: "No verified student matches that matriculation number." });
-    res.json({
-      user: {
-        uid: otherUid,
-        name: otherProfile.name || "Student",
-        department: otherProfile.department || "",
-        level: otherProfile.level || "",
-        profilePicture: otherProfile.profilePicture || ""
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/messages/conversations", requireAuth, async (req, res, next) => {
-  try {
-    const snapshot = await database.ref(`messaging/userConversations/${req.user.uid}`).get();
-    const items = snapshotToList(snapshot.val()).map((item) => ({
-      id: item.conversationId,
-      otherUid: item.otherUid,
-      otherName: item.otherName || "Student",
-      lastMessage: item.lastMessagePreview || "",
-      lastMessageAt: item.lastMessageAt || 0,
-      unreadCount: Number(item.unreadCount || 0),
-      updatedAt: item.updatedAt || item.lastMessageAt || 0
-    })).sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
-    res.json({ items });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/messages/conversations", requireAuth, async (req, res, next) => {
-  try {
-    const otherUid = String(req.body?.otherUid || "").trim();
-    if (!validUid(otherUid)) return res.status(400).json({ error: "A valid student is required." });
-    if (otherUid === req.user.uid) return res.status(400).json({ error: "You cannot start a conversation with yourself." });
-    const otherProfileSnap = await database.ref(`users/${otherUid}/profile`).get();
-    const otherProfile = otherProfileSnap.val() || {};
-    if (!otherProfile.matricVerified) return res.status(403).json({ error: "Only verified students can receive messages." });
-    const conversationId = [req.user.uid, otherUid].sort().join("::");
-    const conversationRef = database.ref(`messaging/conversations/${conversationId}`);
-    const existing = await conversationRef.get();
-    if (!existing.exists()) {
-      await conversationRef.set({
-        id: conversationId,
-        participants: { [req.user.uid]: true, [otherUid]: true },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        lastMessage: "",
-        lastMessageSenderUid: null
-      });
-    }
-    const encryptedId = conversationId;
-    const profileSnap = await database.ref(`users/${req.user.uid}/profile`).get();
-    const profile = profileSnap.val() || {};
-    const userEntry = { conversationId: encryptedId, otherUid, otherName: otherProfile.name || "Student", lastMessagePreview: "", lastMessageAt: Date.now(), unreadCount: 0, updatedAt: Date.now() };
-    const otherEntry = { conversationId: encryptedId, otherUid: req.user.uid, otherName: profile.name || "Student", lastMessagePreview: "", lastMessageAt: Date.now(), unreadCount: 0, updatedAt: Date.now() };
-    await database.ref(`messaging/userConversations/${req.user.uid}/${encryptedId}`).update(userEntry);
-    await database.ref(`messaging/userConversations/${otherUid}/${encryptedId}`).update(otherEntry);
-    res.status(201).json({ conversation: { id: encryptedId, otherUid, otherName: otherProfile.name || "Student" } });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/messages/conversations/:conversationId/messages", requireAuth, async (req, res, next) => {
-  try {
-    const conversationRef = database.ref(`messaging/conversations/${req.params.conversationId}`);
-    const conversationSnap = await conversationRef.get();
-    if (!conversationSnap.exists()) return res.status(404).json({ error: "Conversation not found." });
-    const participants = conversationSnap.val().participants || {};
-    if (!participants[req.user.uid]) return res.status(403).json({ error: "You are not a participant in this conversation." });
-    const messagesSnap = await database.ref(`messaging/messages/${req.params.conversationId}`).orderByChild("createdAt").get();
-    const messages = snapshotToList(messagesSnap.val()).sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
-    res.json({ messages });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/messages/conversations/:conversationId/messages", requireAuth, async (req, res, next) => {
-  try {
-    const conversationRef = database.ref(`messaging/conversations/${req.params.conversationId}`);
-    const conversationSnap = await conversationRef.get();
-    if (!conversationSnap.exists()) return res.status(404).json({ error: "Conversation not found." });
-    const conversation = conversationSnap.val();
-    const participants = conversation.participants || {};
-    if (!participants[req.user.uid]) return res.status(403).json({ error: "You are not a participant in this conversation." });
-    const text = validateTextMessage(req.body?.text, 2000);
-    const now = Date.now();
-    const messageRef = database.ref(`messaging/messages/${req.params.conversationId}`).push();
-    const message = {
-      id: messageRef.key,
-      senderUid: req.user.uid,
-      text,
-      createdAt: now,
-      readBy: { [req.user.uid]: true }
-    };
-    const updates = {};
-    updates[`messaging/messages/${req.params.conversationId}/${messageRef.key}`] = message;
-    updates[`messaging/conversations/${req.params.conversationId}/updatedAt`] = now;
-    updates[`messaging/conversations/${req.params.conversationId}/lastMessage`] = text;
-    updates[`messaging/conversations/${req.params.conversationId}/lastMessageSenderUid`] = req.user.uid;
-    const otherUid = Object.keys(participants).find((uid) => uid !== req.user.uid);
-    for (const uid of Object.keys(participants)) {
-      const userConversationRef = database.ref(`messaging/userConversations/${uid}/${req.params.conversationId}`);
-      const existingSnap = await userConversationRef.get();
-      const existing = existingSnap.val() || {};
-      const nextUnread = uid === req.user.uid ? 0 : Number(existing.unreadCount || 0) + 1;
-      const nextPreview = {
-        conversationId: req.params.conversationId,
-        otherUid: uid === req.user.uid ? otherUid : req.user.uid,
-        otherName: uid === req.user.uid ? conversation.otherName || "Student" : (await database.ref(`users/${req.user.uid}/profile`).get()).val()?.name || "Student",
-        lastMessagePreview: text,
-        lastMessageAt: now,
-        updatedAt: now,
-        unreadCount: nextUnread
-      };
-      updates[`messaging/userConversations/${uid}/${req.params.conversationId}`] = nextPreview;
-    }
-    await database.ref().update(updates);
-    res.status(201).json({ message });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/messages/conversations/:conversationId/read", requireAuth, async (req, res, next) => {
-  try {
-    const conversationRef = database.ref(`messaging/conversations/${req.params.conversationId}`);
-    const snap = await conversationRef.get();
-    if (!snap.exists()) return res.status(404).json({ error: "Conversation not found." });
-    const participants = snap.val().participants || {};
-    if (!participants[req.user.uid]) return res.status(403).json({ error: "You are not a participant in this conversation." });
-    await database.ref(`messaging/userConversations/${req.user.uid}/${req.params.conversationId}/unreadCount`).set(0);
-    res.json({ ok: true });
-  } catch (error) {
-    next(error);
-  }
+registerMessagingRoutes(app, {
+  database,
+  firebaseAuth,
+  requireAuth,
+  validUid,
+  allowMessageSearch,
+  allowMessageAction
 });
 
 app.get("/api/admin/matric-verification", requireAuth, requireAdmin, async (req, res, next) => {
@@ -1333,7 +1201,7 @@ app.put("/api/admin/users/:uid/matric-verification", requireAuth, requireAdmin, 
     const existing = existingSnap.val() || {};
     if (!existing.matricNumber) return res.status(400).json({ error: "This student has no matriculation number to verify." });
     const matricNumber = validateMatricNumber(existing.matricNumber);
-    const lookupRef = database.ref(`matricLookup/${matricNumber}`);
+    const lookupRef = database.ref(`matricLookup/${matricLookupKey(matricNumber)}`);
     if (verified) {
       const reservation = await lookupRef.transaction((current) =>
         current && current !== uid ? undefined : uid
@@ -2406,7 +2274,7 @@ app.use((error, req, res, next) => {
   if (error.status === 413 || error.type === "entity.too.large") {
     return res.status(413).json({ error: "Request is too large." });
   }
-  if (error.statusCode === 400 || error.statusCode === 404) {
+  if ([400, 403, 404, 409, 429].includes(error.statusCode)) {
     return res.status(error.statusCode).json({ error: error.message });
   }
   console.error("API request failed:", error.message);

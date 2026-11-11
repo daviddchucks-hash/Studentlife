@@ -7,63 +7,67 @@
   <title>Messages — AFITStudentLife</title>
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/dashboard.css">
+  <link rel="stylesheet" href="./css/messages.css">
 </head>
-<body class="dashboard-page">
+<body class="dashboard-page messages-page">
   <header class="app-header"></header>
 
   <main class="page-container">
     <section class="page-header">
       <p class="eyebrow">Student Messaging</p>
       <h1>Messages</h1>
-      <p>Search for a verified student using a matric number and start a secure text-only conversation.</p>
+      <p>Find verified students and chat after they accept your message request.</p>
     </section>
 
-    <div class="dashboard-section" style="padding:20px;">
-      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:18px;">
-        <form id="student-search-form" class="tool-form" style="flex:1 1 360px; min-width:260px; margin:0;">
-          <div class="form-row" style="margin:0; align-items:end;">
-            <label class="field" style="flex:1 1 240px; margin:0;">
-              <span>Search by matric number</span>
-              <input id="matric-input" name="matric" type="text" placeholder="AFIT/23/1234" autocomplete="off" required>
-            </label>
-            <button class="button button-primary" type="submit">Search student</button>
+    <section class="messages-app" aria-label="Student messages">
+      <aside class="messages-sidebar">
+        <form id="student-search-form" class="student-search">
+          <label class="field" for="matric-input">Start a message request</label>
+          <div class="student-search-row">
+            <input id="matric-input" name="matric" type="text" placeholder="Matriculation number" autocomplete="off" required>
+            <button class="button button-primary button-small" type="submit">Find</button>
           </div>
         </form>
-      </div>
-
-      <div id="search-state" aria-live="polite"></div>
-
-      <div class="chat-shell" style="display:grid; grid-template-columns:320px 1fr; gap:18px; min-height:620px;">
-        <aside class="chat-sidebar" style="border:1px solid var(--line); border-radius:18px; background:var(--card); padding:12px; display:flex; flex-direction:column; min-height:420px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-            <h2 style="margin:0; font-size:1rem;">Conversations</h2>
-            <span id="conversation-count" class="muted">0</span>
-          </div>
-          <div id="conversation-list" class="record-list"></div>
-        </aside>
-
-        <section class="chat-panel" style="border:1px solid var(--line); border-radius:18px; background:var(--card); display:flex; flex-direction:column; min-height:420px;">
-          <div id="chat-header" style="padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; min-height:72px;">
-            <div class="muted">Select a conversation to begin.</div>
-          </div>
-          <div id="chat-messages" style="flex:1; overflow:auto; padding:18px; display:flex; flex-direction:column; gap:10px; background:rgba(9, 19, 40, 0.02);"></div>
-          <form id="chat-form" style="padding:16px 18px; border-top:1px solid var(--line); display:flex; gap:10px; align-items:flex-end;">
-            <label class="field" style="flex:1; margin:0;">
-              <span class="sr-only">Type a message</span>
-              <textarea id="message-input" rows="1" maxlength="2000" placeholder="Type a text message..." style="resize:vertical; min-height:48px; max-height:180px;"></textarea>
-            </label>
-            <button class="button button-primary" type="submit" id="send-button">Send</button>
-          </form>
+        <div id="search-state" aria-live="polite"></div>
+        <nav class="messages-tabs" aria-label="Message sections">
+          <button type="button" class="messages-tab active" data-panel="conversations-panel">Conversations <span id="conversation-count">0</span></button>
+          <button type="button" class="messages-tab" data-panel="requests-panel">Requests <span id="request-count">0</span></button>
+          <button type="button" class="messages-tab" data-panel="notifications-panel">Alerts <span id="notification-count">0</span></button>
+          <button type="button" class="messages-tab" data-panel="blocked-panel">Blocked</button>
+        </nav>
+        <section id="conversations-panel" class="messages-list-panel">
+          <div id="conversation-list" class="conversation-list" aria-live="polite"><p class="muted">Loading conversations…</p></div>
         </section>
-      </div>
-    </div>
+        <section id="requests-panel" class="messages-list-panel" hidden>
+          <div id="request-list" class="conversation-list" aria-live="polite"><p class="muted">No pending message requests.</p></div>
+        </section>
+        <section id="notifications-panel" class="messages-list-panel" hidden>
+          <div id="notification-list" class="conversation-list" aria-live="polite"><p class="muted">No new alerts.</p></div>
+        </section>
+        <section id="blocked-panel" class="messages-list-panel" hidden>
+          <div id="blocked-list" class="conversation-list"><p class="muted">No blocked students.</p></div>
+        </section>
+      </aside>
+
+      <section class="chat-panel" aria-label="Conversation">
+        <header id="chat-header" class="chat-header">
+          <div class="chat-empty">Choose a conversation or find a student to send a request.</div>
+        </header>
+        <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+        <div id="chat-status" class="chat-status" aria-live="polite"></div>
+        <form id="chat-form" class="chat-form">
+          <label class="sr-only" for="message-input">Text message</label>
+          <textarea id="message-input" rows="1" maxlength="2000" placeholder="Write a message…" disabled></textarea>
+          <button class="button button-primary" type="submit" id="send-button" disabled>Send</button>
+        </form>
+      </section>
+    </section>
   </main>
 
   <footer class="site-footer app-footer">
     <a href="./index.html">AFITStudentLife</a>
     <span>Tools for your academic routine.</span>
   </footer>
-
   <script type="module" src="./js/page-messages.js"></script>
 </body>
 </html>

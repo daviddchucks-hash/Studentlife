@@ -55,6 +55,12 @@ The app includes a NoteSync module that keeps 100-level access enforcement on th
 
 The same integration also extends the existing timetable foundation into a lightweight LectureTrack capability: students can create lecture reminders and track attendance records using the same server-side validation and Firebase data layout without creating a separate application.
 
+## Student messaging
+
+Messaging requires a verified matriculation number and an active Firebase Auth account. Search uses the server-managed `matricLookup` index; new index keys are SHA-256 digests of normalized matriculation numbers, and the API verifies the indexed profile before returning its minimal public identity. Legacy lookup paths remain supported while existing records are migrated. Requests require recipient acceptance; declines have a 30-day resend cooldown, and blocks are enforced on API and Realtime Database reads. Only text messages up to 2,000 characters are supported.
+
+Apply `firebase.rules.json` to the production Realtime Database before enabling realtime conversations. The client can read only its own conversation index, request inbox, blocks, and message notifications; message history and conversation metadata require server-created participant access markers. All messaging writes go through the authenticated Render API. Realtime delivery uses Firebase listeners, while the API remains authoritative for authorization, acceptance, unread counts, and message creation.
+
 ## CourseMate (Version 3)
 
 CourseMate is part of the existing authenticated Express API and static frontend; it does not add another identity provider or direct client access to Firebase. Student discovery is opt-in. The server derives display name, department, level, bio, interests, and an HTTPS profile image from the existing profile, and never returns student number, email, or phone. Discovery, groups, questions, and partner matching are scoped to courses in a student's existing private course list.

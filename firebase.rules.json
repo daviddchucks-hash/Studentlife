@@ -17,6 +17,50 @@
     },
     "departments": {
       ".read": true
+    },
+    "messaging": {
+      "conversations": {
+        "$conversationId": {
+          ".read": "auth != null && data.child('participants').child(auth.uid).val() === true && root.child('messaging/conversationAccess').child(auth.uid).child($conversationId).val() === true",
+          ".write": false
+        }
+      },
+      "messages": {
+        "$conversationId": {
+          ".read": "auth != null && root.child('messaging/conversationAccess').child(auth.uid).child($conversationId).val() === true && root.child('messaging/conversations').child($conversationId).child('participants').child(auth.uid).val() === true && root.child('messaging/conversations').child($conversationId).child('status').val() === 'active'",
+          ".write": false
+        }
+      },
+      "userConversations": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      },
+      "userRequests": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      },
+      "conversationAccess": {
+        "$uid": {
+          ".read": false,
+          ".write": false
+        }
+      },
+      "blocks": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      },
+      "notifications": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      }
     }
   }
 }
