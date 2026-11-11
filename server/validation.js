@@ -453,6 +453,9 @@ function validateTextMessage(value, maxLength = 2000) {
 
 function validateProfile(data) {
   if (!isPlainObject(data)) throw new ValidationError("Profile payload must be an object.");
+  if (Object.prototype.hasOwnProperty.call(data, "matricNumber") || Object.prototype.hasOwnProperty.call(data, "matricVerified")) {
+    throw new ValidationError("Matriculation number and verification status are managed through the secure matriculation endpoint.");
+  }
   const cleanStr = (val, maxLen) => {
     if (val === undefined || val === null) return "";
     if (typeof val !== "string") throw new ValidationError("Profile fields must be strings.");
@@ -467,10 +470,6 @@ function validateProfile(data) {
     bio: cleanStr(data.bio, 500),
     profilePicture: cleanStr(data.profilePicture, 2000)
   };
-  if (Object.prototype.hasOwnProperty.call(data, "matricNumber") || Object.prototype.hasOwnProperty.call(data, "matricVerified")) {
-    profile.matricNumber = validateMatricNumber(data.matricNumber || "");
-    profile.matricVerified = typeof data.matricVerified === "boolean" ? data.matricVerified : false;
-  }
   return profile;
 }
 

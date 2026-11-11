@@ -12,6 +12,8 @@ export async function renderProfileModule(container) {
     let profileData = {
       name: data.profile?.name || data.name || "",
       email: data.email || "",
+      matricNumber: data.profile?.matricNumber || "",
+      matricVerified: Boolean(data.profile?.matricVerified),
       department: data.profile?.department || "",
       level: data.profile?.level || "",
       interests: data.profile?.interests || "",
@@ -28,6 +30,17 @@ export async function renderProfileModule(container) {
               <p class="muted" style="margin:2px 0 0;">${escapeHtml(profileData.email)}</p>
             </div>
             <button class="button button-primary button-small" type="button" id="edit-profile-btn">Edit Profile</button>
+          </div>
+
+          <div class="view-field-group">
+            <div class="view-field">
+              <span class="view-field-label">Matriculation Number</span>
+              <span class="view-field-value">${escapeHtml(profileData.matricNumber) || '<span class="muted">Not set</span>'}</span>
+            </div>
+            <div class="view-field">
+              <span class="view-field-label">Verification Status</span>
+              <span class="view-field-value">${profileData.matricVerified ? '<span class="result-box" style="display:inline-block; padding:4px 8px;">Verified</span>' : '<span class="error-box" style="display:inline-block; padding:4px 8px;">Unverified</span>'}</span>
+            </div>
           </div>
 
           <div class="view-field-group">
@@ -72,6 +85,10 @@ export async function renderProfileModule(container) {
             <div class="form-row">
               <label class="field">Full Name<input name="name" required value="${escapeHtml(profileData.name)}" placeholder="e.g. David Chukwuma"></label>
               <label class="field">Email Address<input type="email" name="email" value="${escapeHtml(profileData.email)}" disabled readonly></label>
+            </div>
+            <div class="form-row">
+              <label class="field">Matriculation Number<input value="${escapeHtml(profileData.matricNumber)}" disabled readonly placeholder="AFIT/23/1234"></label>
+              <label class="field">Verification Status<input value="${profileData.matricVerified ? "Verified" : "Unverified"}" disabled readonly></label>
             </div>
             <div class="form-row">
               <label class="field">Department<input name="department" value="${escapeHtml(profileData.department)}" placeholder="e.g. Computer Science"></label>
@@ -143,7 +160,7 @@ export async function renderProfileModule(container) {
 
           profileData = { ...profileData, ...payload };
           const nameLabel = document.querySelector("#student-name");
-          if (nameLabel) nameLabel.textContent = profileData.email || profileData.name;
+          if (nameLabel) nameLabel.textContent = profileData.name || profileData.email || "Student";
 
           tracker.destroy();
           renderViewMode();

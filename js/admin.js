@@ -33,6 +33,7 @@ export async function renderAdminModule(container) {
         <button class="admin-tab-btn active" type="button" data-tab="stats">Statistics</button>
         <button class="admin-tab-btn" type="button" data-tab="announcements">Announcements</button>
         <button class="admin-tab-btn" type="button" data-tab="directory">Directory</button>
+        <button class="admin-tab-btn" type="button" data-tab="verification">Student Verification</button>
         <button class="admin-tab-btn" type="button" data-tab="feedback">Feedback & Complaints</button>
         <button class="admin-tab-btn" type="button" data-tab="reports">Reports & Moderation</button>
         <button class="admin-tab-btn" type="button" data-tab="coursemate">CourseMate Moderation</button>
@@ -378,6 +379,44 @@ export async function renderAdminModule(container) {
           }
         };
         await loadDir();
+        return;
+      }
+
+      if (tabName === "verification") {
+        try {
+          const res = await apiRequest("/api/admin/matric-verification");
+          const items = res.items || [];
+          contentArea.innerHTML = items.length ? `
+            <div class="record-list">
+              ${items.map((student) => `
+                <div class="record-item">
+                  <div>
+                    <strong>${escapeHtml(student.name || "Student")}</strong>
+                    <small>${escapeHtml(student.department || "Department not set")} · ${escapeHtml(student.level || "Level not set")} · ${escapeHtml(student.matricNumber || "No matric number")}</small>
+                  </div>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <span class="pill-badge">${student.matricVerified ? "Verified" : "Unverified"}</span>
+                    <button class="record-update" type="button" data-verify-uid="${escapeHtml(student.uid)}" data-verify-state="${student.matricVerified ? "false" : "true"}">${student.matricVerified ? "Unverify" : "Verify"}</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : '<p class="empty-state">No students have registered a matriculation number yet.</p>';
+
+          contentArea.onclick = async (e) => {
+            const button = e.target.closest("[data-verify-uid]");
+            if (!button) return;
+            const uid = button.dataset.verifyUid;
+            const verified = button.dataset.verifyState === "true";
+            await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/matric-verification`, {
+              method: "PUT",
+              body: { verified }
+            });
+            await loadTab("verification");
+          };
+        } catch (err) {
+          contentArea.innerHTML = `<p class="error-box">${escapeHtml(err.message || "Could not load student verification records.")}</p>`;
+        }
         return;
       }
 

@@ -79,20 +79,21 @@ async function loadOverview(user) {
 }
 
 const mainPages = [
-  { href: "./calculators.html", title: "1. Calculators & Converters", category: "Calculators", desc: "GPA, CGPA, scientific, physics, Ohm's law, and unit converters." },
-  { href: "./timetable.html", title: "2. Timetable & Schedule", category: "Planning", desc: "Weekly schedule, today's classes, and overlap detection." },
-  { href: "./courses.html", title: "3. Courses & Registration", category: "Academics", desc: "Registered course list, registration draft, and total units." },
+  { href: "./messages.html", title: "1. Student Messaging", category: "Messaging", desc: "Text-only chats with verified students using a matric number search." },
+  { href: "./calculators.html", title: "2. Calculators & Converters", category: "Calculators", desc: "GPA, CGPA, scientific, physics, Ohm's law, and unit converters." },
+  { href: "./timetable.html", title: "3. Timetable & Schedule", category: "Planning", desc: "Weekly schedule, today's classes, and overlap detection." },
+  { href: "./courses.html", title: "4. Courses & Registration", category: "Academics", desc: "Registered course list, registration draft, and total units." },
   { href: "./coursemate.html", title: "CourseMate", category: "Academics", desc: "Find classmates, study groups, course questions, study partners, and revision sessions." },
-  { href: "./assignments.html", title: "4. Assignments & Deadlines", category: "Academics", desc: "Coursework tracker, assignment status, and due dates." },
-  { href: "./exams.html", title: "5. Exams & Countdown", category: "Academics", desc: "Exam schedules, venues, and day countdowns." },
-  { href: "./study.html", title: "6. Study & Timers", category: "Study", desc: "Study session logger, Pomodoro timer, and study plan generator." },
-  { href: "./notes.html", title: "7. Notes & Flashcards", category: "Study", desc: "Study notes, active recall flashcards, practice quizzes, checklists." },
-  { href: "./formula-library.html", title: "8. Formula Library", category: "Resources", desc: "O-Level, A-Level, STEM formulas, and admin manager." },
-  { href: "./saved-items.html", title: "9. My Saved Items", category: "Personal", desc: "Central storage for all saved timetables, notes, courses, and formulas." },
-  { href: "./campus-life.html", title: "10. Campus Life & Directory", category: "Campus", desc: "Hostels, transport shuttles, dining, health center, directory." },
-  { href: "./opportunities.html", title: "11. Marketplace & Opportunities", category: "Campus", desc: "Campus marketplace, student gigs, scholarships, lost & found." },
-  { href: "./community.html", title: "12. Community & Clubs", category: "Campus", desc: "Clubs & societies, student businesses, feedback portal." },
-  { href: "./profile.html", title: "13. Student Profile", category: "Personal", desc: "Manage display name, department, level, skills, and bio." }
+  { href: "./assignments.html", title: "5. Assignments & Deadlines", category: "Academics", desc: "Coursework tracker, assignment status, and due dates." },
+  { href: "./exams.html", title: "6. Exams & Countdown", category: "Academics", desc: "Exam schedules, venues, and day countdowns." },
+  { href: "./study.html", title: "7. Study & Timers", category: "Study", desc: "Study session logger, Pomodoro timer, and study plan generator." },
+  { href: "./notes.html", title: "8. Notes & Flashcards", category: "Study", desc: "Study notes, active recall flashcards, practice quizzes, checklists." },
+  { href: "./formula-library.html", title: "9. Formula Library", category: "Resources", desc: "O-Level, A-Level, STEM formulas, and admin manager." },
+  { href: "./saved-items.html", title: "10. My Saved Items", category: "Personal", desc: "Central storage for all saved timetables, notes, courses, and formulas." },
+  { href: "./campus-life.html", title: "11. Campus Life & Directory", category: "Campus", desc: "Hostels, transport shuttles, dining, health center, directory." },
+  { href: "./opportunities.html", title: "12. Marketplace & Opportunities", category: "Campus", desc: "Campus marketplace, student gigs, scholarships, lost & found." },
+  { href: "./community.html", title: "13. Community & Clubs", category: "Campus", desc: "Clubs & societies, student businesses, feedback portal." },
+  { href: "./profile.html", title: "14. Student Profile", category: "Personal", desc: "Manage display name, department, level, skills, and bio." }
 ];
 
 function renderHubCards(searchQuery = "") {

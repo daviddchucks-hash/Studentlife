@@ -10,6 +10,7 @@ export function initNavigation(activePage = "") {
 
   const navLinks = [
     { href: "./dashboard.html", id: "dashboard", label: "Home" },
+    { href: "./messages.html", id: "messages", label: "Messages" },
     { href: "./courses.html", id: "courses", label: "Academics" },
     { href: "./coursemate.html", id: "coursemate", label: "CourseMate" },
     { href: "./calculators.html", id: "calculators", label: "Calculators" },

@@ -755,7 +755,11 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
   try {
     const payload = req.body || {};
     const newMatric = payload.matricNumber === undefined ? null : String(payload.matricNumber || "").trim();
-    const nextVerified = typeof payload.verified === "boolean" ? payload.verified : false;
+    const requestedVerified = typeof payload.verified === "boolean" ? payload.verified : false;
+    if (requestedVerified && !checkIsAdmin(req.user)) {
+      return res.status(403).json({ error: "Only an administrator can verify a student's matriculation number." });
+    }
+    const nextVerified = requestedVerified && checkIsAdmin(req.user) ? true : false;
     const normalized = newMatric ? validateMatricNumber(newMatric) : "";
     const profileRef = database.ref(`users/${req.user.uid}/profile`);
     const existingSnap = await profileRef.get();
@@ -769,7 +773,11 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
     const saved = { ...existing, ...validateProfile({ ...existing, matricNumber: normalized, matricVerified: nextVerified }) };
     await profileRef.set(saved);
     if (normalized) {
-      await database.ref(`matricLookup/${normalized}`).set(req.user.uid);
+      if (nextVerified) {
+        await database.ref(`matricLookup/${normalized}`).set(req.user.uid);
+      } else {
+        await database.ref(`matricLookup/${normalized}`).remove();
+      }
     } else {
       await database.ref(`matricLookup/${String(existing.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase()}`).remove();
     }
@@ -802,6 +810,9 @@ app.get("/api/messages/search", requireAuth, async (req, res, next) => {
   try {
     const matricNumber = String(req.query.matric || "").trim();
     if (!matricNumber) return res.status(400).json({ error: "Enter a valid matriculation number to search." });
+    if (!allowMessageSearch(req.user.uid)) {
+      return res.status(429).json({ error: "Too many search attempts. Please wait a moment and try again." });
+    }
     const normalized = validateMatricNumber(matricNumber);
     const matched = await database.ref(`matricLookup/${normalized}`).get();
     if (!matched.exists()) return res.status(404).json({ error: "No verified student matches that matriculation number." });
