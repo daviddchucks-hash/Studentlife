@@ -24,9 +24,10 @@
         <form id="student-search-form" class="student-search">
           <label class="field" for="matric-input">Start a message request</label>
           <div class="student-search-row">
-            <input id="matric-input" name="matric" type="text" placeholder="Matriculation number" autocomplete="off" required>
+            <input id="matric-input" name="matric" type="text" placeholder="Matriculation number (max 9 characters)" autocomplete="off" aria-describedby="matric-search-hint" required>
             <button class="button button-primary button-small" type="submit">Find</button>
           </div>
+          <small class="muted" id="matric-search-hint">Enter the student's matriculation number (up to 9 characters).</small>
         </form>
         <div id="search-state" aria-live="polite"></div>
         <nav class="messages-tabs" aria-label="Message sections">

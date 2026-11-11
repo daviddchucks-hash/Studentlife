@@ -380,6 +380,15 @@ searchForm.addEventListener("submit", async (event) => {
     showSearchMessage("Enter a matriculation number to search.");
     return;
   }
+  const normalizedMatric = matric.replace(/\s+/g, "").toUpperCase();
+  if (normalizedMatric.length > 9) {
+    showSearchMessage("Matriculation number must be 9 characters or fewer.");
+    return;
+  }
+  if (!/^[A-Z0-9./_-]+$/.test(normalizedMatric)) {
+    showSearchMessage("Enter a valid matriculation number using letters, numbers, or common separators.");
+    return;
+  }
   const button = searchForm.querySelector('button[type="submit"]');
   button.disabled = true;
   showSearchMessage("Searching verified student records…", true);
