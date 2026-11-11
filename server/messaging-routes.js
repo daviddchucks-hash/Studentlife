@@ -33,7 +33,7 @@ function registerMessagingRoutes(app, {
       })
     ]);
     const profile = profileSnapshot.val() || {};
-    if (!account || account.disabled || profile.matricVerified !== true) return null;
+    if (!account || account.disabled || !profile || typeof profile !== "object") return null;
     return { profile, publicProfile: publicMessagingProfile(uid, profile) };
   }
 

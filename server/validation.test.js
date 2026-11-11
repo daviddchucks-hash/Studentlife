@@ -38,9 +38,10 @@ const {
 test("matriculation numbers normalize consistently without assuming one institution format", () => {
   assert.equal(normalizeMatricNumber(" afit / 23 / 1234 "), "AFIT/23/1234");
   assert.equal(validateMatricNumber(" 2026-1234 "), "2026-1234");
+  assert.equal(validateMatricNumber("AFIT12345"), "AFIT12345");
   assert.equal(validateMatricNumber(""), "");
-  assert.throws(() => validateMatricNumber("bad value!"), /letters, numbers/);
-  assert.throws(() => validateMatricNumber("A".repeat(65)), /too long/);
+  assert.throws(() => validateMatricNumber("bad value!"), /letters, numbers|common separators/);
+  assert.throws(() => validateMatricNumber("A123456789"), /9 characters or fewer/);
 });
 
 test("text message validation rejects empty and oversized payloads", () => {

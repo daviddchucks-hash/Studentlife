@@ -429,22 +429,17 @@ function snapshotToList(value) {
 function normalizeMatricNumber(value) {
   if (value === undefined || value === null || value === "") return "";
   if (typeof value !== "string") throw new ValidationError("Matriculation number must be text.");
-  const cleaned = value.trim().replace(/\s+/g, "").toUpperCase();
-  return cleaned;
+  return value.trim().replace(/\s+/g, "").toUpperCase();
 }
 
 function validateMatricNumber(value) {
   const normalized = normalizeMatricNumber(value);
   if (!normalized) return "";
-  if (normalized.length > 64) throw new ValidationError("Matriculation number is too long.");
-  let pattern;
-  try {
-    pattern = new RegExp(process.env.MATRIC_NUMBER_PATTERN || "^[A-Z0-9][A-Z0-9./_-]{0,63}$");
-  } catch {
-    throw new Error("MATRIC_NUMBER_PATTERN must be a valid regular expression.");
+  if (normalized.length > 9) {
+    throw new ValidationError("Matriculation number must be 9 characters or fewer.");
   }
-  if (!pattern.test(normalized)) {
-    throw new ValidationError("Enter a valid matriculation number using letters, numbers, or / . _ - separators.");
+  if (!/^[A-Z0-9./_-]+$/.test(normalized)) {
+    throw new ValidationError("Enter a valid matriculation number using letters, numbers, or common separators.");
   }
   return normalized;
 }
