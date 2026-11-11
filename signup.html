@@ -16,7 +16,8 @@
       <p class="muted">Your password is handled securely by Firebase Authentication.</p>
       <form id="auth-form" class="form-stack" novalidate>
         <label>Your name<input name="name" type="text" autocomplete="name" required maxlength="80" placeholder="How should we address you?"></label>
-        <label>Matriculation number<input name="matricNumber" type="text" autocomplete="off" required maxlength="9" placeholder="AFIT12345"></label>
+        <label>Matriculation number<input name="matricNumber" type="text" autocomplete="off" required placeholder="AFIT12345"></label>
+        <small class="muted">Enter exactly 9 characters using letters, numbers, or common separators.</small>
         <label>Email address<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
         <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters"></label>
         <label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Enter it again"></label>

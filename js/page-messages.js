@@ -5,6 +5,8 @@ import { apiRequest } from "./api.js";
 import { initNavigation } from "./nav.js";
 
 const searchForm = document.querySelector("#student-search-form");
+const matricInput = document.querySelector("#matric-input");
+const matricCount = document.querySelector("#matric-search-count");
 const searchState = document.querySelector("#search-state");
 const conversationList = document.querySelector("#conversation-list");
 const conversationCount = document.querySelector("#conversation-count");
@@ -77,6 +79,27 @@ function showSearchMessage(message, success = false) {
     ? `<div class="${success ? "result-box" : "error-box"}">${escapeHtml(message)}</div>`
     : "";
 }
+
+function normalizeMatricSearch(value) {
+  return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function matricSearchError(value) {
+  const normalized = normalizeMatricSearch(value);
+  if (normalized.length > 9) return "Matriculation number must be 9 characters or fewer.";
+  if (normalized && !/^[A-Z0-9./_-]+$/.test(normalized)) {
+    return "Enter a valid matriculation number using letters, numbers, or common separators.";
+  }
+  return "";
+}
+
+matricInput.addEventListener("input", () => {
+  const normalized = normalizeMatricSearch(matricInput.value);
+  matricCount.textContent = `${normalized.length}/9 characters`;
+  const error = matricSearchError(matricInput.value);
+  if (error) showSearchMessage(error);
+  else if (searchState.querySelector(".error-box")) showSearchMessage("");
+});
 
 function showChatStatus(message, success = false) {
   chatStatus.innerHTML = message
@@ -375,18 +398,14 @@ chatHeader.addEventListener("click", async (event) => {
 
 searchForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const matric = String(new FormData(searchForm).get("matric") || "").trim();
+  const matric = matricInput.value.trim();
   if (!matric) {
     showSearchMessage("Enter a matriculation number to search.");
     return;
   }
-  const normalizedMatric = matric.replace(/\s+/g, "").toUpperCase();
-  if (normalizedMatric.length > 9) {
-    showSearchMessage("Matriculation number must be 9 characters or fewer.");
-    return;
-  }
-  if (!/^[A-Z0-9./_-]+$/.test(normalizedMatric)) {
-    showSearchMessage("Enter a valid matriculation number using letters, numbers, or common separators.");
+  const validationError = matricSearchError(matric);
+  if (validationError) {
+    showSearchMessage(validationError);
     return;
   }
   const button = searchForm.querySelector('button[type="submit"]');

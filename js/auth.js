@@ -50,8 +50,8 @@ form.addEventListener("submit", async (event) => {
   }
 
   const normalizedMatric = matricNumber.replace(/\s+/g, "").toUpperCase();
-  if (isSignup && (!normalizedMatric || normalizedMatric.length > 9 || !/^[A-Z0-9./_-]+$/.test(normalizedMatric))) {
-    showMessage("Enter a valid matriculation number with up to 9 characters using letters, numbers, or common separators.");
+  if (isSignup && (normalizedMatric.length !== 9 || !/^[A-Z0-9./_-]+$/.test(normalizedMatric))) {
+    showMessage("Enter a valid matriculation number using exactly 9 characters.");
     return;
   }
 

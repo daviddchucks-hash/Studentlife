@@ -444,6 +444,15 @@ function validateMatricNumber(value) {
   return normalized;
 }
 
+function validateRegistrationMatricNumber(value) {
+  const normalized = validateMatricNumber(value);
+  if (!normalized) throw new ValidationError("Matriculation number is required.");
+  if (normalized.length !== 9) {
+    throw new ValidationError("Matriculation number must be exactly 9 characters when creating an account.");
+  }
+  return normalized;
+}
+
 function validateTextMessage(value, maxLength = 2000) {
   if (typeof value !== "string") throw new ValidationError("Message text must be text.");
   const cleaned = value.trim();
@@ -922,6 +931,7 @@ module.exports = {
   validRecordId,
   normalizeMatricNumber,
   validateMatricNumber,
+  validateRegistrationMatricNumber,
   validateTextMessage,
   validateRecord,
   validateFormula,

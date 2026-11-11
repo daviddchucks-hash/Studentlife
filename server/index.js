@@ -16,6 +16,7 @@ const {
   snapshotToList,
   validRecordId,
   validateMatricNumber,
+  validateRegistrationMatricNumber,
   validateRecord,
   validateFormula,
   validateProfile,
@@ -1106,6 +1107,7 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
     const profileRef = database.ref(`users/${req.user.uid}/profile`);
     const existingSnap = await profileRef.get();
     const existing = existingSnap.val() || {};
+    if (!existing.matricNumber) validateRegistrationMatricNumber(newMatric);
     const previousMatric = String(existing.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
     const nextVerified = isAdmin
       ? requestedVerified

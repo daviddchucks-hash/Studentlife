@@ -6,6 +6,7 @@ const {
   validRecordId,
   normalizeMatricNumber,
   validateMatricNumber,
+  validateRegistrationMatricNumber,
   validateTextMessage,
   validateRecord,
   snapshotToList,
@@ -42,6 +43,9 @@ test("matriculation numbers normalize consistently without assuming one institut
   assert.equal(validateMatricNumber(""), "");
   assert.throws(() => validateMatricNumber("bad value!"), /letters, numbers|common separators/);
   assert.throws(() => validateMatricNumber("A123456789"), /9 characters or fewer/);
+  assert.equal(validateRegistrationMatricNumber(" 123 456 789 "), "123456789");
+  assert.throws(() => validateRegistrationMatricNumber("12345678"), /exactly 9 characters/);
+  assert.throws(() => validateRegistrationMatricNumber(""), /required/);
 });
 
 test("text message validation rejects empty and oversized payloads", () => {
