@@ -145,8 +145,8 @@ test("NoteSync validation rules enforce 100-level access and safe submission pay
     lectureDate: "2025-02-12",
     notesText: "Sorting algorithm overview",
     noteType: "typed",
-    attachmentCount: 1,
-    attachmentRefs: ["file-1"],
+    attachmentCount: 0,
+    attachmentRefs: [],
     status: "Pending Review"
   });
 
@@ -228,6 +228,8 @@ test("NoteSync validation rules enforce 100-level access and safe submission pay
   });
   assert.equal(submission.noteType, "typed");
   assert.throws(() => validateNoteSyncSubmission({ ...submission, courseCode: "" }), /courseCode/);
+  assert.throws(() => validateNoteSyncSubmission({ ...submission, noteType: "pdf" }), /Only typed notes are supported/);
+  assert.throws(() => validateNoteSyncSubmission({ ...submission, attachmentRefs: ["https://untrusted.example/file"] }), /File uploads are not configured/);
 
   const application = validateNoteSyncApplication({
     fullName: "Grace Hopper",

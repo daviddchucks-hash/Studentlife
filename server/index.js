@@ -1,11 +1,13 @@
 "use strict";
 
+const { createHash } = require("node:crypto");
 const express = require("express");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
-const { applySubmissionReward } = require("./notesync-rewards");
+const { applySubmissionReward, resolveWithdrawalWallet } = require("./notesync-rewards");
+const { isPublicLostFoundItem, publicLostFoundItem } = require("./public-data");
 const {
   definitions,
   getDefinition,
@@ -30,7 +32,10 @@ const {
   validateNoteSyncWithdrawal,
   validateNoteSyncNotification,
   validateLectureTrackReminder,
-  validateLectureTrackAttendance
+  validateLectureTrackAttendance,
+  NOTE_SYNC_SUBMISSION_STATUSES,
+  NOTE_SYNC_APPLICATION_STATUSES,
+  NOTE_SYNC_REWARD_CATEGORIES
 } = require("./validation");
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -209,8 +214,6 @@ function coinsForQuality(category) {
 
 async function ensureNoteSyncWallet(uid) {
   const walletRef = database.ref(`notesync/wallets/${uid}`);
-  const snap = await walletRef.get();
-  if (snap.exists()) return snap.val();
   const empty = {
     studentUid: uid,
     availableCoins: 0,
@@ -221,8 +224,8 @@ async function ensureNoteSyncWallet(uid) {
     lastUpdated: Date.now(),
     withdrawnThisPeriod: 0
   };
-  await walletRef.set(empty);
-  return empty;
+  const result = await walletRef.transaction((current) => current || empty);
+  return result.snapshot.val();
 }
 
 async function appendNotification(userUid, title, message, destination = "notesync") {
@@ -342,7 +345,22 @@ app.get("/api/notesync/library", requireAuth, async (req, res, next) => {
           submission.academicSession
         ].join(" ").toLowerCase();
         return haystack.includes(search);
-      });
+      })
+      .map((submission) => ({
+        id: submission.id,
+        courseCode: submission.courseCode,
+        courseTitle: submission.courseTitle,
+        lectureTopic: submission.lectureTopic,
+        department: submission.department,
+        level: submission.level,
+        semester: submission.semester,
+        academicSession: submission.academicSession,
+        lectureWeek: submission.lectureWeek,
+        lectureDate: submission.lectureDate,
+        studentName: submission.studentName,
+        qualityCategory: submission.qualityCategory,
+        createdAt: submission.createdAt
+      }));
 
     items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
     res.json({ items });
@@ -362,16 +380,24 @@ app.get("/api/notesync/library/:id", requireAuth, async (req, res, next) => {
     const item = snap.val();
     if (item.status !== "Approved") return res.status(403).json({ error: "This note is not approved for the public library." });
 
-    const downloadUrl = Array.isArray(item.attachmentRefs) && item.attachmentRefs.length > 0
-      ? item.attachmentRefs[0]
-      : null;
-
     res.json({
       item: {
         id: req.params.id,
-        ...item,
-        downloadUrl,
-        fileType: item.noteType || "typed",
+        courseCode: item.courseCode,
+        courseTitle: item.courseTitle,
+        lectureTopic: item.lectureTopic,
+        department: item.department,
+        level: item.level,
+        semester: item.semester,
+        academicSession: item.academicSession,
+        lectureWeek: item.lectureWeek,
+        lectureDate: item.lectureDate,
+        studentName: item.studentName,
+        qualityCategory: item.qualityCategory,
+        notesText: item.notesText,
+        noteType: "typed",
+        downloadUrl: null,
+        fileType: "typed",
         createdAtLabel: item.createdAt ? new Date(Number(item.createdAt)).toISOString() : null
       }
     });
@@ -390,18 +416,6 @@ app.get("/api/notesync/library/:id/download", requireAuth, async (req, res, next
     if (!snap.exists()) return res.status(404).json({ error: "Note not found." });
     const item = snap.val();
     if (item.status !== "Approved") return res.status(403).json({ error: "This note is not approved for download." });
-
-    const downloadUrl = Array.isArray(item.attachmentRefs) && item.attachmentRefs.length > 0
-      ? item.attachmentRefs[0]
-      : null;
-
-    if (downloadUrl) {
-      return res.json({
-        downloadUrl,
-        fileName: `${String(item.courseCode || "note").replace(/\s+/g, "-")}.bin`,
-        contentType: item.noteType === "pdf" ? "application/pdf" : item.noteType === "image" ? "image/jpeg" : "text/plain"
-      });
-    }
 
     const fileName = `${String(item.courseCode || "note").replace(/\s+/g, "-")}.txt`;
     res.json({
@@ -483,9 +497,18 @@ app.post("/api/notesync/submissions", requireAuth, async (req, res, next) => {
       status: "Pending Review"
     });
     const duplicateKey = [req.user.uid, payload.courseCode, payload.lectureDate, payload.lectureWeek, payload.lectureTopic].join("|");
+    const duplicateHash = createHash("sha256").update(duplicateKey).digest("hex");
     const existing = await database.ref("notesync/submissions").get();
     const duplicates = snapshotToList(existing.val()).filter((item) => item.studentUid === req.user.uid && item.duplicateHash === duplicateKey);
     if (duplicates.length > 0) {
+      return res.status(409).json({ error: "A matching note submission already exists for this course, lecture date, and topic." });
+    }
+    const submissionRef = database.ref("notesync/submissions").push();
+    const keyRef = database.ref(`notesync/submissionKeys/${duplicateHash}`);
+    const reservation = await keyRef.transaction((current) =>
+      current ? undefined : { studentUid: req.user.uid, submissionId: submissionRef.key }
+    );
+    if (!reservation.committed) {
       return res.status(409).json({ error: "A matching note submission already exists for this course, lecture date, and topic." });
     }
     const now = Date.now();
@@ -499,9 +522,24 @@ app.post("/api/notesync/submissions", requireAuth, async (req, res, next) => {
       qualityCategory: "",
       rewardCoins: 0
     };
-    const ref = await database.ref("notesync/submissions").push(saved);
-    await appendNotification(req.user.uid, "Submission received", "Your lecture note has been submitted and is now awaiting review.");
-    res.status(201).json({ id: ref.key, record: saved });
+    try {
+      await database.ref().update({
+        [`notesync/submissions/${submissionRef.key}`]: saved,
+        [`notesync/submissionKeys/${duplicateHash}`]: { studentUid: req.user.uid, submissionId: submissionRef.key },
+        [`notesync/notifications/submission-${submissionRef.key}`]: {
+          userUid: req.user.uid,
+          title: "Submission received",
+          message: "Your lecture note has been submitted and is now awaiting review.",
+          destination: "notesync",
+          read: false,
+          createdAt: now
+        }
+      });
+    } catch (error) {
+      await keyRef.transaction((current) => current?.submissionId === submissionRef.key ? null : undefined);
+      throw error;
+    }
+    res.status(201).json({ id: submissionRef.key, record: saved });
   } catch (error) {
     next(error);
   }
@@ -526,13 +564,15 @@ app.post("/api/notesync/withdrawals", requireAuth, async (req, res, next) => {
     const profile = await getProfileSnapshot(req.user.uid);
     if (!isNoteSyncEligible(profile)) return res.status(403).json({ error: "Only 100-level students can request withdrawals." });
     const wallet = await ensureNoteSyncWallet(req.user.uid);
+    const requestId = String(req.body?.requestId || "").trim();
+    if (!validRecordId(requestId)) return res.status(400).json({ error: "A valid withdrawal request ID is required." });
     const payload = validateNoteSyncWithdrawal({
       ...req.body,
       nairaAmount: Math.round(((Number(req.body.coins) || 0) / 200) * 1000)
     });
-    if (wallet.availableCoins < payload.coins) return res.status(400).json({ error: "Insufficient available AFT Coins for this withdrawal." });
     const now = Date.now();
     const withdrawal = {
+      id: requestId,
       studentUid: req.user.uid,
       coins: payload.coins,
       nairaAmount: payload.nairaAmount,
@@ -543,25 +583,257 @@ app.post("/api/notesync/withdrawals", requireAuth, async (req, res, next) => {
       processedAt: "",
       paymentReference: ""
     };
-    const ref = await database.ref("notesync/withdrawals").push(withdrawal);
-    const nextWallet = {
-      ...wallet,
-      availableCoins: wallet.availableCoins - payload.coins,
-      pendingRewards: (wallet.pendingRewards || 0) + payload.coins,
-      lastUpdated: now
-    };
-    await database.ref(`notesync/wallets/${req.user.uid}`).set(nextWallet);
-    await database.ref("notesync/transactions").push({
-      studentUid: req.user.uid,
-      type: "withdrawal-request",
-      amount: payload.coins,
-      status: "Pending",
-      timestamp: now,
-      reference: ref.key,
-      note: "Withdrawal request submitted"
+    withdrawal.bankInfo = payload.bankInfo;
+    const walletRef = database.ref(`notesync/wallets/${req.user.uid}`);
+    let requestAlreadyExisted = false;
+    let requestConflict = false;
+    const result = await walletRef.transaction((current) => {
+      requestAlreadyExisted = false;
+      requestConflict = false;
+      const currentWallet = current || wallet;
+      const priorRequest = currentWallet.withdrawalRequests?.[requestId];
+      if (priorRequest) {
+        const matches = priorRequest.studentUid === req.user.uid &&
+          priorRequest.coins === payload.coins &&
+          priorRequest.bankInfo === payload.bankInfo;
+        if (!matches) {
+          requestConflict = true;
+          return undefined;
+        }
+        requestAlreadyExisted = true;
+        return currentWallet;
+      }
+      if ((Number(currentWallet.availableCoins) || 0) < payload.coins) return undefined;
+      return {
+        ...currentWallet,
+        availableCoins: currentWallet.availableCoins - payload.coins,
+        pendingRewards: (Number(currentWallet.pendingRewards) || 0) + payload.coins,
+        lastUpdated: now,
+        withdrawalRequests: {
+          ...(currentWallet.withdrawalRequests || {}),
+          [requestId]: withdrawal
+        }
+      };
     });
-    await appendNotification(req.user.uid, "Withdrawal request submitted", `A withdrawal request for ${payload.coins} AFT Coins is pending administrator review.`);
-    res.status(201).json({ id: ref.key, record: withdrawal });
+    if (requestConflict) {
+      return res.status(409).json({ error: "This withdrawal request ID has already been used with different details." });
+    }
+    const reservedRequest = result.snapshot.val()?.withdrawalRequests?.[requestId];
+    if (!reservedRequest) {
+      return res.status(409).json({ error: "Insufficient available AFT Coins or conflicting withdrawal request." });
+    }
+
+    if (requestAlreadyExisted && (await database.ref(`notesync/withdrawals/${requestId}`).get()).exists()) {
+      return res.status(200).json({
+        id: requestId,
+        record: {
+          id: requestId,
+          studentUid: req.user.uid,
+          coins: reservedRequest.coins,
+          nairaAmount: reservedRequest.nairaAmount,
+          status: reservedRequest.status,
+          requestDate: reservedRequest.requestDate,
+          processedAt: reservedRequest.processedAt,
+          paymentReference: reservedRequest.paymentReference
+        }
+      });
+    }
+
+    const transactionType = reservedRequest.status === "Paid"
+      ? "withdrawal-paid"
+      : reservedRequest.status === "Rejected"
+        ? "withdrawal-refund"
+        : "withdrawal-request";
+    const notification = reservedRequest.status === "Paid"
+      ? { title: "Withdrawal paid", message: "Your withdrawal has been marked paid by an administrator." }
+      : reservedRequest.status === "Rejected"
+        ? { title: "Withdrawal rejected", message: `Your withdrawal was rejected: ${reservedRequest.rejectionReason || "Contact an administrator for details."}` }
+        : { title: "Withdrawal request submitted", message: `A withdrawal request for ${payload.coins} AFT Coins is pending administrator review.` };
+    await database.ref().update({
+      [`notesync/withdrawals/${requestId}`]: reservedRequest,
+      [`notesync/transactions/withdrawal-${requestId}`]: {
+        studentUid: req.user.uid,
+        type: transactionType,
+        amount: payload.coins,
+        status: reservedRequest.status,
+        timestamp: reservedRequest.requestDate,
+        reference: requestId,
+        note: reservedRequest.paymentReference || reservedRequest.rejectionReason || "Withdrawal request submitted"
+      },
+      [`notesync/notifications/withdrawal-${requestId}`]: {
+        userUid: req.user.uid,
+        ...notification,
+        destination: "notesync",
+        read: false,
+        createdAt: reservedRequest.processedAt || reservedRequest.requestDate
+      }
+    });
+    const safeWithdrawal = {
+      id: requestId,
+      studentUid: req.user.uid,
+      coins: payload.coins,
+      nairaAmount: payload.nairaAmount,
+      status: reservedRequest.status,
+      requestDate: reservedRequest.requestDate,
+      processedAt: reservedRequest.processedAt,
+      paymentReference: reservedRequest.paymentReference
+    };
+    res.status(requestAlreadyExisted ? 200 : 201).json({ id: requestId, record: safeWithdrawal });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notesync/withdrawals", requireAuth, async (req, res, next) => {
+  try {
+    const snapshot = await database.ref(`notesync/wallets/${req.user.uid}/withdrawalRequests`).get();
+    const items = snapshotToList(snapshot.val())
+      .sort((a, b) => (Number(b.requestDate) || 0) - (Number(a.requestDate) || 0))
+      .map((item) => ({
+        id: item.id,
+        coins: item.coins,
+        nairaAmount: item.nairaAmount,
+        status: item.status,
+        requestDate: item.requestDate,
+        processedAt: item.processedAt,
+        paymentReference: item.paymentReference
+      }));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/notesync/withdrawals", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const [withdrawalsSnapshot, walletsSnapshot] = await Promise.all([
+      database.ref("notesync/withdrawals").get(),
+      database.ref("notesync/wallets").get()
+    ]);
+    const byId = new Map(snapshotToList(withdrawalsSnapshot.val()).map((item) => [item.id, item]));
+    for (const [uid, wallet] of Object.entries(walletsSnapshot.val() || {})) {
+      for (const [id, request] of Object.entries(wallet.withdrawalRequests || {})) {
+        if (!byId.has(id)) byId.set(id, { ...request, id, studentUid: uid });
+      }
+    }
+    const items = [...byId.values()].sort((a, b) => (Number(b.requestDate) || 0) - (Number(a.requestDate) || 0));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/admin/notesync/withdrawals/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    if (!validRecordId(id)) return res.status(400).json({ error: "Invalid withdrawal ID." });
+    const requestedStatus = String(req.body?.status || "");
+    if (!["Processing", "Paid", "Rejected"].includes(requestedStatus)) {
+      return res.status(400).json({ error: "Withdrawal status must be Processing, Paid, or Rejected." });
+    }
+    const withdrawalRef = database.ref(`notesync/withdrawals/${id}`);
+    const [withdrawalSnapshot, walletsSnapshot] = await Promise.all([
+      withdrawalRef.get(),
+      database.ref("notesync/wallets").get()
+    ]);
+    let withdrawal = withdrawalSnapshot.val();
+    if (!withdrawal) {
+      for (const [uid, wallet] of Object.entries(walletsSnapshot.val() || {})) {
+        if (wallet.withdrawalRequests?.[id]) {
+          withdrawal = { ...wallet.withdrawalRequests[id], id, studentUid: uid };
+          break;
+        }
+      }
+    }
+    if (!withdrawal) return res.status(404).json({ error: "Withdrawal request not found." });
+    if (requestedStatus === "Processing") {
+      if (withdrawal.status === "Processing") return res.json({ id, record: withdrawal });
+      if (withdrawal.status !== "Pending") return res.status(409).json({ error: "Only pending withdrawals can be marked as processing." });
+      const walletRef = database.ref(`notesync/wallets/${withdrawal.studentUid}`);
+      const result = await walletRef.transaction((current) => {
+        const request = current?.withdrawalRequests?.[id];
+        if (!request) return undefined;
+        if (request.status === "Processing") return current;
+        if (request.status !== "Pending") return undefined;
+        return {
+          ...current,
+          withdrawalRequests: {
+            ...current.withdrawalRequests,
+            [id]: { ...request, status: "Processing", processedAt: Date.now(), reviewedByUid: req.user.uid }
+          }
+        };
+      });
+      const updatedRequest = result.snapshot.val()?.withdrawalRequests?.[id];
+      if (!updatedRequest || updatedRequest.status !== "Processing") {
+        return res.status(409).json({ error: "This withdrawal was already changed by another administrator." });
+      }
+      await database.ref().update({
+        [`notesync/withdrawals/${id}`]: updatedRequest,
+        [`notesync/wallets/${withdrawal.studentUid}/withdrawalRequests/${id}`]: updatedRequest,
+        [`notesync/transactions/withdrawal-${id}/status`]: "Processing",
+        [`notesync/transactions/withdrawal-${id}/timestamp`]: updatedRequest.processedAt,
+        [`notesync/transactions/withdrawal-${id}/note`]: "Withdrawal request is being processed."
+      });
+      return res.json({ id, record: updatedRequest });
+    }
+    const paymentReference = String(req.body?.paymentReference || "").trim().slice(0, 200);
+    const rejectionReason = String(req.body?.rejectionReason || "").trim().slice(0, 500);
+    if (requestedStatus === "Paid" && !paymentReference) {
+      return res.status(400).json({ error: "A payment reference is required after the payment has been made." });
+    }
+    if (requestedStatus === "Rejected" && !rejectionReason) {
+      return res.status(400).json({ error: "A rejection reason is required." });
+    }
+    if (!["Pending", "Processing"].includes(withdrawal.status)) {
+      if (withdrawal.status === requestedStatus) return res.json({ id, record: withdrawal });
+      return res.status(409).json({ error: "This withdrawal has already been resolved." });
+    }
+
+    const walletRef = database.ref(`notesync/wallets/${withdrawal.studentUid}`);
+    const result = await walletRef.transaction((current) => {
+      if (!current) return undefined;
+      const resolution = resolveWithdrawalWallet(current, id, requestedStatus, Number(withdrawal.coins), Date.now());
+      return resolution.conflict ? undefined : resolution.wallet;
+    });
+    const wallet = result.snapshot.val();
+    const resolution = wallet?.withdrawalResolutions?.[id];
+    if (!resolution || resolution.status !== requestedStatus) {
+      return res.status(409).json({ error: "Withdrawal balance could not be reconciled; no status change was made." });
+    }
+    const processedAt = resolution.resolvedAt;
+    const updated = {
+      ...withdrawal,
+      id,
+      status: requestedStatus,
+      processedAt,
+      reviewedByUid: req.user.uid,
+      paymentReference: requestedStatus === "Paid" ? paymentReference : "",
+      rejectionReason: requestedStatus === "Rejected" ? rejectionReason : ""
+    };
+    await database.ref().update({
+      [`notesync/withdrawals/${id}`]: updated,
+      [`notesync/wallets/${withdrawal.studentUid}/withdrawalRequests/${id}`]: updated,
+      [`notesync/transactions/withdrawal-${id}`]: {
+        studentUid: withdrawal.studentUid,
+        type: requestedStatus === "Paid" ? "withdrawal-paid" : "withdrawal-refund",
+        amount: withdrawal.coins,
+        status: requestedStatus,
+        timestamp: processedAt,
+        reference: id,
+        note: requestedStatus === "Paid" ? paymentReference : rejectionReason
+      },
+      [`notesync/notifications/withdrawal-${id}`]: {
+        userUid: withdrawal.studentUid,
+        title: requestedStatus === "Paid" ? "Withdrawal paid" : "Withdrawal rejected",
+        message: requestedStatus === "Paid"
+          ? "Your withdrawal has been marked paid by an administrator."
+          : `Your withdrawal was rejected: ${rejectionReason}`,
+        destination: "notesync",
+        read: false,
+        createdAt: processedAt
+      }
+    });
+    res.json({ id, record: updated });
   } catch (error) {
     next(error);
   }
@@ -612,6 +884,24 @@ app.put("/api/admin/notesync/submissions/:id", requireAuth, requireAdmin, async 
     const submission = existing.val();
     const nextStatus = String(req.body.status || submission.status || "Pending Review");
     const qualityCategory = String(req.body.qualityCategory || submission.qualityCategory || "");
+    if (!NOTE_SYNC_SUBMISSION_STATUSES.includes(nextStatus)) {
+      return res.status(400).json({ error: "Invalid NoteSync submission status." });
+    }
+    if (qualityCategory && !Object.prototype.hasOwnProperty.call(NOTE_SYNC_REWARD_CATEGORIES, qualityCategory)) {
+      return res.status(400).json({ error: "Select a valid note quality category." });
+    }
+    if (["Approved", "Rejected"].includes(submission.status) && nextStatus !== submission.status) {
+      return res.status(409).json({ error: "A reviewed submission cannot be moved to another status." });
+    }
+    if (nextStatus === "Rejected" && !String(req.body.rejectionReason || submission.rejectionReason || "").trim()) {
+      return res.status(400).json({ error: "A rejection reason is required." });
+    }
+    if (nextStatus === "Requires Correction" && !String(req.body.reviewNotes || submission.reviewNotes || "").trim()) {
+      return res.status(400).json({ error: "Review notes are required when requesting a correction." });
+    }
+    if (nextStatus === submission.status && ["Approved", "Rejected"].includes(submission.status)) {
+      return res.json({ id, record: submission });
+    }
     const rewardCategory = qualityCategory || "Basic acceptable notes";
     const rewardCoins = coinsForQuality(rewardCategory);
     const reviewNotes = String(req.body.reviewNotes || submission.reviewNotes || "");
@@ -708,7 +998,16 @@ app.put("/api/admin/notesync/applications/:id", requireAuth, requireAdmin, async
     if (!existing.exists()) return res.status(404).json({ error: "Application not found." });
     const application = existing.val();
     const status = String(req.body.status || application.status || "Submitted");
-    const adminNotes = String(req.body.adminNotes || application.adminNotes || "");
+    if (!NOTE_SYNC_APPLICATION_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Invalid NoteSync application status." });
+    }
+    if (["Approved", "Rejected"].includes(application.status) && status !== application.status) {
+      return res.status(409).json({ error: "A reviewed application cannot be moved to another status." });
+    }
+    if (status === application.status && ["Approved", "Rejected"].includes(application.status)) {
+      return res.json({ id, record: application });
+    }
+    const adminNotes = String(req.body.adminNotes || application.adminNotes || "").trim().slice(0, 2000);
     const updated = { ...application, status, adminNotes, updatedAt: Date.now() };
     await ref.set(updated);
     await appendNotification(application.studentUid, "Level application updated", `Your NoteSync level application status is now ${status}.`);
@@ -783,30 +1082,47 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
     const payload = req.body || {};
     const newMatric = payload.matricNumber === undefined ? null : String(payload.matricNumber || "").trim();
     const requestedVerified = typeof payload.verified === "boolean" ? payload.verified : false;
-    if (requestedVerified && !checkIsAdmin(req.user)) {
+    const isAdmin = checkIsAdmin(req.user);
+    if (requestedVerified && !isAdmin) {
       return res.status(403).json({ error: "Only an administrator can verify a student's matriculation number." });
     }
-    const nextVerified = requestedVerified && checkIsAdmin(req.user) ? true : false;
     const normalized = newMatric ? validateMatricNumber(newMatric) : "";
     const profileRef = database.ref(`users/${req.user.uid}/profile`);
     const existingSnap = await profileRef.get();
     const existing = existingSnap.val() || {};
+    const previousMatric = String(existing.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
+    const nextVerified = isAdmin
+      ? requestedVerified
+      : Boolean(existing.matricVerified && normalized && normalized === previousMatric);
     if (normalized) {
       const match = await findUserByMatricNumber(normalized);
       if (match && match.uid !== req.user.uid) {
         return res.status(409).json({ error: "This matriculation number is already registered to another student." });
       }
     }
-    const saved = { ...existing, ...validateProfile({ ...existing, matricNumber: normalized, matricVerified: nextVerified }) };
-    await profileRef.set(saved);
-    if (normalized) {
-      if (nextVerified) {
-        await database.ref(`matricLookup/${normalized}`).set(req.user.uid);
-      } else {
-        await database.ref(`matricLookup/${normalized}`).remove();
+    const saved = { ...existing, matricNumber: normalized, matricVerified: nextVerified, updatedAt: Date.now() };
+    let reservedLookup = false;
+    if (normalized && nextVerified) {
+      const lookupRef = database.ref(`matricLookup/${normalized}`);
+      const lookupResult = await lookupRef.transaction((uid) => uid && uid !== req.user.uid ? undefined : req.user.uid);
+      if (!lookupResult.committed) {
+        return res.status(409).json({ error: "This matriculation number is already verified for another student." });
       }
-    } else {
-      await database.ref(`matricLookup/${String(existing.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase()}`).remove();
+      reservedLookup = true;
+    }
+    try {
+      await profileRef.set(saved);
+    } catch (error) {
+      if (reservedLookup && normalized !== previousMatric) {
+        await database.ref(`matricLookup/${normalized}`).transaction((uid) => uid === req.user.uid ? null : undefined);
+      }
+      throw error;
+    }
+    if (previousMatric && previousMatric !== normalized) {
+      await database.ref(`matricLookup/${previousMatric}`).transaction((uid) => uid === req.user.uid ? null : undefined);
+    }
+    if (normalized && !nextVerified) {
+      await database.ref(`matricLookup/${normalized}`).transaction((uid) => uid === req.user.uid ? null : undefined);
     }
     res.json({ profile: saved });
   } catch (error) {
@@ -823,9 +1139,6 @@ app.put("/api/profile", requireAuth, async (req, res, next) => {
     const existing = existingSnap.val() || {};
     const saved = { ...existing, ...clean, updatedAt: now, createdAt: existing.createdAt || now };
     await profileRef.set(saved);
-    if (saved.matricNumber) {
-      await database.ref(`matricLookup/${String(saved.matricNumber).trim().replace(/\s+/g, "").toUpperCase()}`).set(req.user.uid);
-    }
     await refreshCourseIndex(database, req.user.uid);
     res.json({ profile: saved });
   } catch (error) {
@@ -1011,19 +1324,35 @@ app.put("/api/admin/users/:uid/matric-verification", requireAuth, requireAdmin, 
   try {
     const uid = String(req.params.uid || "").trim();
     if (!uid) return res.status(400).json({ error: "A valid student UID is required." });
-    const verified = Boolean(req.body?.verified);
+    if (typeof req.body?.verified !== "boolean") {
+      return res.status(400).json({ error: "Verification status must be true or false." });
+    }
+    const verified = req.body.verified;
     const profileRef = database.ref(`users/${uid}/profile`);
     const existingSnap = await profileRef.get();
     const existing = existingSnap.val() || {};
     if (!existing.matricNumber) return res.status(400).json({ error: "This student has no matriculation number to verify." });
-    const updated = { ...existing, matricVerified: verified };
-    await profileRef.set(updated);
-    if (existing.matricNumber) {
-      if (verified) {
-        await database.ref(`matricLookup/${String(existing.matricNumber).trim().replace(/\s+/g, "").toUpperCase()}`).set(uid);
-      } else {
-        await database.ref(`matricLookup/${String(existing.matricNumber).trim().replace(/\s+/g, "").toUpperCase()}`).remove();
+    const matricNumber = validateMatricNumber(existing.matricNumber);
+    const lookupRef = database.ref(`matricLookup/${matricNumber}`);
+    if (verified) {
+      const reservation = await lookupRef.transaction((current) =>
+        current && current !== uid ? undefined : uid
+      );
+      if (!reservation.committed) {
+        return res.status(409).json({ error: "This matriculation number is already verified for another student." });
       }
+    }
+    const updated = { ...existing, matricVerified: verified, updatedAt: Date.now() };
+    try {
+      await profileRef.set(updated);
+    } catch (error) {
+      if (verified && existing.matricVerified !== true) {
+        await lookupRef.transaction((current) => current === uid ? null : undefined);
+      }
+      throw error;
+    }
+    if (!verified) {
+      await lookupRef.transaction((current) => current === uid ? null : undefined);
     }
     res.json({ profile: updated });
   } catch (error) {
@@ -1371,10 +1700,7 @@ app.delete("/api/opportunities/:id", requireAuth, async (req, res, next) => {
 app.get("/api/lost-found", async (req, res, next) => {
   try {
     const snap = await database.ref("lostFound").get();
-    let items = snapshotToList(snap.val()).filter((item) => {
-      const status = String(item.status || "published").toLowerCase();
-      return status === "published" || status === "match_found" || status === "claim_pending" || status === "resolved" || status === "returned" || status === "recovered";
-    });
+    let items = snapshotToList(snap.val()).filter(isPublicLostFoundItem);
     const { type, category, status, search, location } = req.query;
     if (type) items = items.filter((i) => String(i.type || "").toLowerCase() === String(type).toLowerCase());
     if (category) items = items.filter((i) => String(i.category || "").toLowerCase() === String(category).toLowerCase());
@@ -1385,12 +1711,11 @@ app.get("/api/lost-found", async (req, res, next) => {
       items = items.filter((i) =>
         String(i.title || "").toLowerCase().includes(q) ||
         String(i.description || "").toLowerCase().includes(q) ||
-        String(i.identifyingCharacteristics || "").toLowerCase().includes(q) ||
         String(i.location || "").toLowerCase().includes(q)
       );
     }
     items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
-    res.json({ items });
+    res.json({ items: items.map(publicLostFoundItem) });
   } catch (error) {
     next(error);
   }
@@ -1487,7 +1812,9 @@ app.get("/api/lost-found/matches/:id", requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: "You can only view matches for your own item records." });
     }
     const snap = await database.ref("lostFound").get();
-    const allItems = snapshotToList(snap.val()).filter((entry) => entry.id !== req.params.id && entry.visibility !== "private");
+    const allItems = snapshotToList(snap.val()).filter((entry) =>
+      entry.id !== req.params.id && isPublicLostFoundItem(entry)
+    );
     const matches = allItems.filter((entry) => {
       if (entry.type === target.type) return false;
       if (String(entry.category || "").toLowerCase() !== String(target.category || "").toLowerCase()) return false;
@@ -1497,7 +1824,7 @@ app.get("/api/lost-found/matches/:id", requireAuth, async (req, res, next) => {
       const ratio = q.split(/\s+/).filter(Boolean).filter((word) => other.includes(word)).length;
       return ratio >= 2 || other.includes(String(target.location || "").toLowerCase()) || q.includes(String(entry.location || "").toLowerCase());
     }).slice(0, 10);
-    res.json({ matches });
+    res.json({ matches: matches.map(publicLostFoundItem) });
   } catch (error) {
     next(error);
   }
@@ -1513,7 +1840,7 @@ app.post("/api/lost-found", requireAuth, async (req, res, next) => {
       reporterEmail: req.user.email || null,
       createdAt: now,
       updatedAt: now,
-      status: validated.status === "published" ? "published" : "pending_review"
+      status: "pending_review"
     };
     const ref = await database.ref("lostFound").push(saved);
     res.status(201).json({ id: ref.key, record: saved });
@@ -1534,7 +1861,12 @@ app.put("/api/lost-found/:id", requireAuth, async (req, res, next) => {
     }
     const validated = validateLostFoundItem(req.body);
     const now = Date.now();
-    const saved = { ...existingVal, ...validated, updatedAt: now };
+    const saved = {
+      ...existingVal,
+      ...validated,
+      status: checkIsAdmin(req.user) ? validated.status : existingVal.status,
+      updatedAt: now
+    };
     await itemRef.set(saved);
     res.json({ id: req.params.id, record: saved });
   } catch (error) {
@@ -1565,8 +1897,13 @@ app.post("/api/lost-found/claims", requireAuth, async (req, res, next) => {
     const itemSnap = await database.ref(`lostFound/${payload.targetId}`).get();
     if (!itemSnap.exists()) return res.status(404).json({ error: "Lost or found listing not found." });
     const item = itemSnap.val();
+    if (item.visibility === "private" || !["published", "match_found", "claim_pending"].includes(item.status || "published")) {
+      return res.status(404).json({ error: "This item is not available for claims." });
+    }
+    if (item.reporterUid === req.user.uid) return res.status(400).json({ error: "You cannot submit a claim on your own listing." });
     const claimRef = await database.ref("lostFoundClaims").push({
       ...payload,
+      status: "pending",
       itemTitle: item.title,
       itemType: item.type,
       itemReporterUid: item.reporterUid,
@@ -1576,9 +1913,9 @@ app.post("/api/lost-found/claims", requireAuth, async (req, res, next) => {
       reviewedAt: null,
       reviewerUid: null,
       reviewNotes: "",
-      status: payload.status
+      status: "pending"
     });
-    res.status(201).json({ id: claimRef.key, record: { ...payload, id: claimRef.key, itemTitle: item.title, itemType: item.type } });
+    res.status(201).json({ id: claimRef.key, record: { ...payload, status: "pending", id: claimRef.key, itemTitle: item.title, itemType: item.type } });
   } catch (error) {
     next(error);
   }
@@ -1606,9 +1943,37 @@ app.put("/api/lost-found/claims/:id", requireAuth, async (req, res, next) => {
     if (claim.claimantUid !== req.user.uid && claim.itemReporterUid !== req.user.uid && !checkIsAdmin(req.user)) {
       return res.status(403).json({ error: "You are not authorized to review this claim." });
     }
-    const nextStatus = ["pending", "under_review", "approved", "rejected", "completed"].includes(req.body?.status) ? req.body.status : claim.status;
-    const saved = { ...claim, status: nextStatus, reviewNotes: String(req.body?.reviewNotes || claim.reviewNotes || "").slice(0, 2000), reviewedAt: Date.now(), reviewerUid: req.user.uid };
+    const nextStatus = String(req.body?.status || "");
+    const admin = checkIsAdmin(req.user);
+    const itemOwner = claim.itemReporterUid === req.user.uid;
+    const claimant = claim.claimantUid === req.user.uid;
+    const allowedTransitions = admin || itemOwner
+      ? {
+          pending: ["under_review", "approved", "rejected"],
+          under_review: ["approved", "rejected"],
+          approved: ["completed"]
+        }
+      : claimant
+        ? { pending: ["cancelled"] }
+        : {};
+    if (!allowedTransitions[claim.status]?.includes(nextStatus)) {
+      return res.status(400).json({ error: "This claim status transition is not allowed." });
+    }
+    const saved = claimant && !admin
+      ? { ...claim, status: nextStatus, cancelledAt: Date.now() }
+      : {
+          ...claim,
+          status: nextStatus,
+          reviewNotes: String(req.body?.reviewNotes || claim.reviewNotes || "").trim().slice(0, 2000),
+          reviewedAt: Date.now(),
+          reviewerUid: req.user.uid
+        };
     await claimRef.set(saved);
+    if (itemOwner || admin) {
+      const itemRef = database.ref(`lostFound/${claim.targetId}`);
+      if (nextStatus === "approved") await itemRef.update({ status: "claim_pending", updatedAt: Date.now() });
+      if (nextStatus === "completed") await itemRef.update({ status: "returned", updatedAt: Date.now() });
+    }
     res.json({ id: req.params.id, record: saved });
   } catch (error) {
     next(error);

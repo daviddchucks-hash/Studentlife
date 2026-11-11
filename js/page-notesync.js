@@ -185,7 +185,7 @@ function renderSubmissionForm() {
         </div>
         <div class="form-row">
           <label class="field">Lecture date<input type="date" name="lectureDate" required></label>
-          <label class="field">Note type<select name="noteType"><option value="typed">Typed</option><option value="image">Image</option><option value="pdf">PDF</option></select></label>
+          <label class="field">Note type<input value="Typed text" disabled></label>
         </div>
         <label class="field">Notes<textarea name="notesText" rows="6" required placeholder="Paste the note, summary, formula sheet, or lesson write-up here."></textarea></label>
         <div id="notesync-form-message"></div>
@@ -195,7 +195,13 @@ function renderSubmissionForm() {
   `;
 }
 
-function renderWallet(wallet) {
+function createWithdrawalRequestId() {
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function renderWallet(wallet, withdrawals = []) {
   const available = Number(wallet?.availableCoins || 0);
   return `
     <div class="dashboard-section">
@@ -210,6 +216,24 @@ function renderWallet(wallet) {
           <p style="font-size: 2rem; margin: 0;">${Number(wallet?.totalEarned || 0)}</p>
         </div>
       </div>
+      <p class="fine-print">Withdrawals are reviewed by an administrator. Any payment is sent manually outside this app; do not treat a request as a payment confirmation.</p>
+      <form id="notesync-withdrawal-form" class="tool-form" data-request-id="${createWithdrawalRequestId()}">
+        <h4>Request a withdrawal</h4>
+        <div class="form-row">
+          <label class="field">AFT Coins<input name="coins" type="number" min="200" step="1" max="${available}" required></label>
+          <label class="field">Bank name, account name, and account number<textarea name="bankInfo" required maxlength="4000" rows="2"></textarea></label>
+        </div>
+        <p class="fine-print">Bank details are private and available only to authorized administrators for processing this request.</p>
+        <div data-withdrawal-message></div>
+        <button class="button button-primary button-small" type="submit" ${available < 200 ? "disabled" : ""}>Submit withdrawal request</button>
+      </form>
+      <h4>Your withdrawal requests</h4>
+      ${withdrawals.length ? `<div class="record-list">${withdrawals.map((request) => `
+        <div class="record-item">
+          <div><strong>${Number(request.coins || 0)} AFT Coins · ₦${Number(request.nairaAmount || 0).toLocaleString()}</strong>
+          <small>${escapeHtml(request.status || "Pending")} · ${escapeHtml(request.paymentReference || "")}</small></div>
+        </div>
+      `).join("")}</div>` : '<p class="muted">No withdrawal requests yet.</p>'}
     </div>
   `;
 }
@@ -288,12 +312,13 @@ async function loadNoteSyncPage() {
       return;
     }
 
-    const [catalog, submissions, wallet, library, lectureTrack] = await Promise.all([
+    const [catalog, submissions, wallet, library, lectureTrack, withdrawals] = await Promise.all([
       apiRequest("/api/notesync/course-catalog"),
       apiRequest("/api/notesync/submissions"),
       apiRequest("/api/notesync/wallet"),
       apiRequest("/api/notesync/library"),
-      apiRequest("/api/notesync/lecture-track")
+      apiRequest("/api/notesync/lecture-track"),
+      apiRequest("/api/notesync/withdrawals")
     ]);
 
     contentRoot.innerHTML = `
@@ -301,7 +326,7 @@ async function loadNoteSyncPage() {
       ${renderLibrary(library.items || [])}
       ${renderLectureTrack(lectureTrack || {})}
       ${renderSubmissionForm()}
-      ${renderWallet(wallet.wallet || {})}
+      ${renderWallet(wallet.wallet || {}, withdrawals.items || [])}
       ${renderSubmissions(submissions.items || [])}
     `;
 
@@ -322,7 +347,7 @@ async function loadNoteSyncPage() {
     const messageBox = document.querySelector("#notesync-form-message");
     submitForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      messageBox.innerHTML = "<p class='muted'>Uploading note…</p>";
+      messageBox.innerHTML = "<p class='muted'>Submitting note…</p>";
       try {
         const formData = new FormData(submitForm);
         const payload = {
@@ -333,7 +358,7 @@ async function loadNoteSyncPage() {
           lectureTopic: formData.get("lectureTopic"),
           lectureWeek: formData.get("lectureWeek"),
           lectureDate: formData.get("lectureDate"),
-          noteType: formData.get("noteType"),
+          noteType: "typed",
           notesText: formData.get("notesText"),
           attachmentCount: 0,
           attachmentRefs: []
@@ -398,6 +423,30 @@ async function loadNoteSyncPage() {
       });
     }
 
+    const withdrawalForm = document.querySelector("#notesync-withdrawal-form");
+    withdrawalForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const output = withdrawalForm.querySelector("[data-withdrawal-message]");
+      const submitButton = withdrawalForm.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      output.innerHTML = "<p class='muted'>Submitting withdrawal request…</p>";
+      try {
+        await apiRequest("/api/notesync/withdrawals", {
+          method: "POST",
+          body: {
+            ...Object.fromEntries(new FormData(withdrawalForm).entries()),
+            coins: Number(new FormData(withdrawalForm).get("coins")),
+            requestId: withdrawalForm.dataset.requestId
+          }
+        });
+        await loadNoteSyncPage();
+        renderStatus("Withdrawal request submitted for administrator review.", "success");
+      } catch (error) {
+        output.innerHTML = `<div class="error-box">${escapeHtml(error.message || "Could not submit withdrawal request.")}</div>`;
+        submitButton.disabled = false;
+      }
+    });
+
     contentRoot.addEventListener("click", async (event) => {
       const viewButton = event.target.closest("[data-view-note]");
       const downloadButton = event.target.closest("[data-download-note]");
@@ -417,11 +466,15 @@ async function loadNoteSyncPage() {
         }
         if (downloadButton) {
           const response = await apiRequest(`/api/notesync/library/${id}/download`);
-          const preview = document.querySelector("#notesync-library-preview");
-          if (preview) {
-            const text = response.preview || "Download ready.";
-            preview.innerHTML = `Download ready: <strong>${escapeHtml(response.fileName || "Note")}</strong><br>${escapeHtml(String(text).slice(0, 900))}`;
-          }
+          const blob = new Blob([String(response.preview || "")], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = response.fileName || "notesync-note.txt";
+          document.body.append(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
         }
       } catch (error) {
         const preview = document.querySelector("#notesync-library-preview");

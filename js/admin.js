@@ -36,7 +36,9 @@ export async function renderAdminModule(container) {
         <button class="admin-tab-btn" type="button" data-tab="verification">Student Verification</button>
         <button class="admin-tab-btn" type="button" data-tab="feedback">Feedback & Complaints</button>
         <button class="admin-tab-btn" type="button" data-tab="reports">Reports & Moderation</button>
+        <button class="admin-tab-btn" type="button" data-tab="lost-found">Lost & Found</button>
         <button class="admin-tab-btn" type="button" data-tab="coursemate">CourseMate Moderation</button>
+        <button class="admin-tab-btn" type="button" data-tab="notesync">NoteSync & Withdrawals</button>
       </div>
 
       <div id="admin-tab-content"></div>
@@ -469,6 +471,73 @@ export async function renderAdminModule(container) {
         return;
       }
 
+      if (tabName === "lost-found") {
+        try {
+          const [listingResult, claimResult] = await Promise.all([
+            apiRequest("/api/admin/lost-found"),
+            apiRequest("/api/admin/lost-found/claims")
+          ]);
+          contentArea.innerHTML = `
+            <h3>Lost-and-found listings</h3>
+            ${(listingResult.items || []).length ? (listingResult.items || []).map((item) => `
+              <form class="formula-card" data-lost-found-review="${escapeHtml(item.id)}">
+                <strong>${escapeHtml(item.type || "item")} · ${escapeHtml(item.title || "Untitled item")}</strong>
+                <p>${escapeHtml(item.location || "")} · ${escapeHtml(item.reporterEmail || item.reporterUid || "")} · ${escapeHtml(item.status || "")}</p>
+                <details><summary>View private report details</summary>
+                  <p>${escapeHtml(item.description || "")}</p>
+                  <p>${escapeHtml(item.identifyingCharacteristics || "")}</p>
+                  <p>${escapeHtml(item.contactInfo || "")}</p>
+                </details>
+                <label class="field">Status<select name="status">
+                  ${["pending_review", "published", "match_found", "claim_pending", "returned", "recovered", "closed", "rejected", "resolved"].map((status) => `<option ${item.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select></label>
+                <label class="field">Review notes<textarea name="reviewNotes" maxlength="2000" rows="2">${escapeHtml(item.reviewNotes || "")}</textarea></label>
+                <div data-review-message></div><button class="button button-primary button-small" type="submit">Save listing review</button>
+              </form>
+            `).join("") : '<p class="empty-state">No lost-and-found listings.</p>'}
+            <h3>Claims (private identifying details)</h3>
+            ${(claimResult.items || []).length ? (claimResult.items || []).map((claim) => `
+              <form class="formula-card" data-lost-claim-review="${escapeHtml(claim.id)}">
+                <strong>${escapeHtml(claim.itemTitle || "Item")} · ${escapeHtml(claim.claimantName || "Claimant")}</strong>
+                <p>${escapeHtml(claim.claimantEmail || claim.claimantUid || "")} · ${escapeHtml(claim.status || "pending")}</p>
+                <p>${escapeHtml(claim.reason || "")}</p>
+                <details><summary>View private ownership details</summary><p>${escapeHtml(claim.identifyingDetails || "")}</p></details>
+                <label class="field">Status<select name="status">
+                  ${["pending", "under_review", "approved", "rejected", "completed"].map((status) => `<option ${claim.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select></label>
+                <label class="field">Review notes<textarea name="reviewNotes" maxlength="2000" rows="2">${escapeHtml(claim.reviewNotes || "")}</textarea></label>
+                <div data-review-message></div><button class="button button-primary button-small" type="submit">Save claim review</button>
+              </form>
+            `).join("") : '<p class="empty-state">No claims have been submitted.</p>'}
+          `;
+          contentArea.onsubmit = async (event) => {
+            const form = event.target;
+            const listingId = form.dataset.lostFoundReview;
+            const claimId = form.dataset.lostClaimReview;
+            if (!listingId && !claimId) return;
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            const message = form.querySelector("[data-review-message]");
+            button.disabled = true;
+            try {
+              const values = Object.fromEntries(new FormData(form).entries());
+              if (listingId) {
+                await apiRequest(`/api/admin/lost-found/${encodeURIComponent(listingId)}`, { method: "PUT", body: values });
+              } else {
+                await apiRequest(`/api/lost-found/claims/${encodeURIComponent(claimId)}`, { method: "PUT", body: values });
+              }
+              await loadTab("lost-found");
+            } catch (error) {
+              message.innerHTML = `<div class="error-box">${escapeHtml(error.message || "Could not save this review.")}</div>`;
+              button.disabled = false;
+            }
+          };
+        } catch (error) {
+          contentArea.innerHTML = `<p class="error-box">${escapeHtml(error.message || "Could not load lost-and-found moderation.")}</p>`;
+        }
+        return;
+      }
+
       if (tabName === "coursemate") {
         try {
           const res = await apiRequest("/api/admin/coursemate/reports");
@@ -503,6 +572,95 @@ export async function renderAdminModule(container) {
           };
         } catch (error) {
           contentArea.innerHTML = `<p class="error-box">${escapeHtml(error.message || "Could not load CourseMate reports.")}</p>`;
+        }
+        return;
+      }
+
+      if (tabName === "notesync") {
+        try {
+          const [overview, submissions, applications, withdrawals] = await Promise.all([
+            apiRequest("/api/admin/notesync/overview"),
+            apiRequest("/api/admin/notesync/submissions"),
+            apiRequest("/api/admin/notesync/applications"),
+            apiRequest("/api/admin/notesync/withdrawals")
+          ]);
+          contentArea.innerHTML = `
+            <div class="result-box"><strong>NoteSync administration</strong><p>Mark a withdrawal as paid only after sending payment outside this application. No payment provider is connected.</p></div>
+            <div class="card-grid">
+              <div class="summary-stat"><span>Pending notes</span><strong>${Number(overview.stats?.pendingSubmissions || 0)}</strong></div>
+              <div class="summary-stat"><span>Approved notes</span><strong>${Number(overview.stats?.approvedNotes || 0)}</strong></div>
+              <div class="summary-stat"><span>Pending withdrawals</span><strong>${Number(overview.stats?.pendingWithdrawalRequests || 0)}</strong></div>
+              <div class="summary-stat"><span>Applications</span><strong>${Number(overview.stats?.activeApplications || 0)}</strong></div>
+            </div>
+            <h3>Note submissions</h3>
+            ${(submissions.items || []).length ? (submissions.items || []).map((item) => `
+              <form class="formula-card" data-note-review="${escapeHtml(item.id)}">
+                <strong>${escapeHtml(item.courseCode)} — ${escapeHtml(item.lectureTopic)}</strong>
+                <p>${escapeHtml(item.studentName)} · ${escapeHtml(item.department)} · ${escapeHtml(item.status)}</p>
+                <label class="field">Review status<select name="status">
+                    <option value="" selected disabled>Choose a status</option>
+                    ${["Under Review", "Approved", "Rejected", "Requires Correction"].map((status) => `<option ${item.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                  </select></label>
+                <label class="field">Quality<select name="qualityCategory">
+                  ${["Basic acceptable notes", "Good notes", "Very good notes", "Excellent notes"].map((quality) => `<option ${item.qualityCategory === quality ? "selected" : ""}>${quality}</option>`).join("")}
+                </select></label>
+                <label class="field">Review notes<textarea name="reviewNotes" maxlength="2000" rows="2">${escapeHtml(item.reviewNotes || "")}</textarea></label>
+                <label class="field">Rejection reason<input name="rejectionReason" maxlength="500" value="${escapeHtml(item.rejectionReason || "")}"></label>
+                <div data-review-message></div><button class="button button-primary button-small" type="submit">Save review</button>
+              </form>
+            `).join("") : '<p class="empty-state">No note submissions.</p>'}
+            <h3>Level applications</h3>
+            ${(applications.items || []).length ? (applications.items || []).map((item) => `
+              <form class="formula-card" data-application-review="${escapeHtml(item.id)}">
+                <strong>${escapeHtml(item.fullName)} · ${escapeHtml(item.department)} · ${escapeHtml(item.currentLevel)} level</strong>
+                <p>${escapeHtml(item.email)} · ${escapeHtml(item.status)}</p>
+                <label class="field">Status<select name="status">
+                  <option value="" selected disabled>Choose a status</option>
+                  ${["Submitted", "Under Review", "Approved", "Rejected"].map((status) => `<option ${item.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select></label>
+                <label class="field">Administrator notes<textarea name="adminNotes" maxlength="2000" rows="2">${escapeHtml(item.adminNotes || "")}</textarea></label>
+                <div data-review-message></div><button class="button button-primary button-small" type="submit">Save application review</button>
+              </form>
+            `).join("") : '<p class="empty-state">No level applications.</p>'}
+            <h3>Withdrawal requests</h3>
+            ${(withdrawals.items || []).length ? (withdrawals.items || []).map((item) => `
+              <form class="formula-card" data-withdrawal-review="${escapeHtml(item.id)}">
+                <strong>${Number(item.coins || 0)} AFT Coins · ₦${Number(item.nairaAmount || 0).toLocaleString()}</strong>
+                <p>${escapeHtml(item.studentUid)} · ${escapeHtml(item.status)}</p>
+                <details><summary>View private bank details</summary><p>${escapeHtml(item.bankInfo || "No bank details recorded.")}</p></details>
+                <label class="field">Action<select name="status">
+                  <option value="" selected disabled>Choose an action</option>
+                  ${["Processing", "Paid", "Rejected"].map((status) => `<option ${item.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                </select></label>
+                <label class="field">Payment reference<input name="paymentReference" maxlength="200" value="${escapeHtml(item.paymentReference || "")}"></label>
+                <label class="field">Rejection reason<input name="rejectionReason" maxlength="500" value="${escapeHtml(item.rejectionReason || "")}"></label>
+                <div data-review-message></div><button class="button button-primary button-small" type="submit">Save withdrawal status</button>
+              </form>
+            `).join("") : '<p class="empty-state">No withdrawal requests.</p>'}
+          `;
+          contentArea.onsubmit = async (event) => {
+            const form = event.target;
+            const noteId = form.dataset.noteReview;
+            const applicationId = form.dataset.applicationReview;
+            const withdrawalId = form.dataset.withdrawalReview;
+            if (!noteId && !applicationId && !withdrawalId) return;
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            const message = form.querySelector("[data-review-message]");
+            button.disabled = true;
+            try {
+              const values = Object.fromEntries(new FormData(form).entries());
+              if (noteId) await apiRequest(`/api/admin/notesync/submissions/${encodeURIComponent(noteId)}`, { method: "PUT", body: values });
+              if (applicationId) await apiRequest(`/api/admin/notesync/applications/${encodeURIComponent(applicationId)}`, { method: "PUT", body: values });
+              if (withdrawalId) await apiRequest(`/api/admin/notesync/withdrawals/${encodeURIComponent(withdrawalId)}`, { method: "PUT", body: values });
+              await loadTab("notesync");
+            } catch (error) {
+              message.innerHTML = `<div class="error-box">${escapeHtml(error.message || "Could not save this review.")}</div>`;
+              button.disabled = false;
+            }
+          };
+        } catch (error) {
+          contentArea.innerHTML = `<p class="error-box">${escapeHtml(error.message || "Could not load NoteSync administration.")}</p>`;
         }
         return;
       }

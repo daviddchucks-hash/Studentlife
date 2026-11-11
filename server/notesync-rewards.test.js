@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { applySubmissionReward } = require("./notesync-rewards");
+const { applySubmissionReward, resolveWithdrawalWallet } = require("./notesync-rewards");
 
 test("submission rewards update a wallet and record an idempotency marker", () => {
   const wallet = {
@@ -34,4 +34,25 @@ test("submission rewards cannot be applied twice", () => {
   };
 
   assert.equal(applySubmissionReward(wallet, "submission-1", 10, "Good notes", 5678), null);
+});
+
+test("rejected withdrawals restore coins and repeated resolution is idempotent", () => {
+  const wallet = { availableCoins: 20, pendingRewards: 200, totalRedeemed: 0 };
+  const result = resolveWithdrawalWallet(wallet, "withdrawal-1", "Rejected", 200, 1234);
+
+  assert.equal(result.applied, true);
+  assert.equal(result.wallet.availableCoins, 220);
+  assert.equal(result.wallet.pendingRewards, 0);
+  assert.equal(result.wallet.totalRedeemed, 0);
+  assert.equal(resolveWithdrawalWallet(result.wallet, "withdrawal-1", "Rejected", 200, 5678).applied, false);
+  assert.equal(resolveWithdrawalWallet(result.wallet, "withdrawal-1", "Paid", 200, 5678).conflict, true);
+});
+
+test("paid withdrawals reduce pending coins and increase redeemed totals once", () => {
+  const wallet = { availableCoins: 0, pendingRewards: 400, totalRedeemed: 100 };
+  const result = resolveWithdrawalWallet(wallet, "withdrawal-2", "Paid", 200, 1234);
+
+  assert.equal(result.wallet.pendingRewards, 200);
+  assert.equal(result.wallet.totalRedeemed, 300);
+  assert.equal(resolveWithdrawalWallet(result.wallet, "withdrawal-2", "Paid", 200, 5678).applied, false);
 });

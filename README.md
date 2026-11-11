@@ -23,6 +23,7 @@ The public web-app configuration is used only for client-side Firebase Authentic
    - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete Firebase service-account JSON, stored only in Render.
    - `FIREBASE_DATABASE_URL`: the exact Realtime Database URL copied from Firebase Console.
    - `FRONTEND_ORIGINS`: `https://daviddchucks-hash.github.io` (already specified in `render.yaml`; add a local development origin only when needed).
+   - `ADMIN_EMAILS` or `ADMIN_UIDS`: a comma-separated allowlist of trusted administrator accounts; configure at least one before relying on moderation features.
 3. The current Render URL is already set as `API_BASE_URL` in `js/app-config.js`. If the service URL changes, update that public URL (without a trailing slash) and push the frontend change.
 4. The Render health check is `GET /api/health`. Authenticated routes require `Authorization: Bearer <Firebase ID token>`.
 
@@ -50,7 +51,7 @@ The calculators use a common 5-point grade-point input scale and indicative scor
 
 ## NoteSync and LectureTrack
 
-The app includes a production-minded NoteSync module that keeps 100-level access enforcement on the backend. Approved lecture notes are exposed through the authenticated library API and filtered by department, level, semester, and academic session, while submission review, AFT Coin rewards, withdrawals, and admin approval remain in the same Express/Firebase architecture.
+The app includes a NoteSync module that keeps 100-level access enforcement on the backend. Approved typed lecture notes are exposed through the authenticated library API and filtered by department, level, semester, and academic session. File uploads are not configured. Withdrawal requests reserve AFT Coins and require manual administrator processing; the administrator must send payment outside the app before marking a request paid. No payment provider is connected.
 
 The same integration also extends the existing timetable foundation into a lightweight LectureTrack capability: students can create lecture reminders and track attendance records using the same server-side validation and Firebase data layout without creating a separate application.
 
@@ -80,6 +81,12 @@ CourseMate uses these API routes (all require Firebase ID-token authentication u
 The new database paths inherit the root-deny Firebase rules and are accessed only by the Render Admin SDK. Existing users' course indexes must be initialized once after deployment using `npm run migrate:coursemate-index` with the same `FIREBASE_SERVICE_ACCOUNT_JSON` and `FIREBASE_DATABASE_URL` already configured for the API. The migration does not add environment variables or write to user profiles; it builds discovery indexes only from existing `courses/personal` and `courses/registration` records. New/changed courses and profiles are indexed on the existing authenticated API flows.
 
 The existing course entry feature permits students to maintain their own list and is not an institution-verified registrar catalogue. CourseMate does not accept a new course directly in its group/question forms, but its course eligibility necessarily reflects that existing source. Connecting to an authoritative registrar/course catalogue requires that service/data to be available. File attachments, an external calendar export, notification preference controls, and account suspension are not added; the existing repository has no verified upload storage, academic calendar API, notification preference model, or account moderation service. Approved NoteSync links are referenced by ID rather than copied.
+
+## Before public launch
+
+The campus-life pages intentionally withhold hostel, transport, dining, health, organization, business, and emergency-contact details until they can be verified against current official AFIT information. Do not publish unverified contacts or service claims.
+
+Before announcing the site publicly, verify the existing Render service returns `{"ok":true}` from `/api/health`, confirm Firebase Authentication and Realtime Database configuration, and test sign-up/sign-in, profile updates, private student data access, lost-and-found claims and moderation, NoteSync reviews and withdrawal reconciliation, and admin authorization using dedicated test accounts. Confirm the GitHub Pages origin and admin allowlist are configured in Render. Keep service-account credentials only in Render and never use real student bank details or accounts for smoke tests.
 
 ## Local checks
 

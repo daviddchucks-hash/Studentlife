@@ -680,9 +680,15 @@ function validateNoteSyncSubmission(data) {
   const lectureWeek = requiredString("lectureWeek", data.lectureWeek, 40);
   if (!isDate(data.lectureDate)) throw new ValidationError("Lecture date must be a valid YYYY-MM-DD date.");
   const notesText = requiredString("notesText", data.notesText, 20000);
-  const noteType = ["typed", "image", "pdf"].includes(data.noteType) ? data.noteType : "typed";
-  const attachmentCount = Number.isInteger(data.attachmentCount) ? Math.max(0, data.attachmentCount) : 0;
-  const attachmentRefs = Array.isArray(data.attachmentRefs) ? data.attachmentRefs.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 50) : [];
+  if (data.noteType !== undefined && data.noteType !== "typed") {
+    throw new ValidationError("Only typed notes are supported; file uploads are not configured.");
+  }
+  const noteType = "typed";
+  const attachmentCount = Number.isInteger(data.attachmentCount) ? data.attachmentCount : 0;
+  const attachmentRefs = Array.isArray(data.attachmentRefs) ? data.attachmentRefs : [];
+  if (attachmentCount !== 0 || attachmentRefs.length !== 0) {
+    throw new ValidationError("File uploads are not configured for NoteSync.");
+  }
   const status = NOTE_SYNC_SUBMISSION_STATUSES.includes(data.status) ? data.status : "Draft";
   const reviewNotes = typeof data.reviewNotes === "string" ? data.reviewNotes.trim().slice(0, 2000) : "";
   const rejectionReason = typeof data.rejectionReason === "string" ? data.rejectionReason.trim().slice(0, 500) : "";
