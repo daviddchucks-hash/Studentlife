@@ -115,7 +115,7 @@ const tools = [
   { id: "emergency-safety", name: "27. Emergency & Safety Hotlines", category: "Campus & Living", description: "24/7 Campus security, ambulance, chief porter, and emergency calls." },
   { id: "utilities", name: "28. Useful Document Utilities", category: "Personal & Utilities", description: "PDF merger, splitter, compressor, image tools, QR generator." },
   { id: "ai-assistant", name: "29. AI Student Assistant", category: "Academics", description: "Interactive study AI assistant, prompt guide, and note summary." },
-  { id: "profile", name: "30. Student Profile Manager", category: "Personal & Utilities", description: "Manage name, department, level, interests, skills, and bio." },
+  { id: "profile", name: "30. Student Profile Manager", category: "Personal & Utilities", description: "Manage student details and matriculation number verification." },
   { id: "alumni-networking", name: "31. Alumni & Networking Connect", category: "Opportunities & Services", description: "AFIT alumni network, mentorship, and post-grad pathways." },
   { id: "opportunities", name: "32. Scholarships & Opportunities", category: "Opportunities & Services", description: "Filterable scholarships, fellowships, and competition grants." },
   { id: "feedback", name: "33. Feedback & Complaints Portal", category: "Personal & Utilities", description: "Structured feedback and official complaint submissions." },

@@ -152,6 +152,66 @@
 .page-header { margin-bottom: 24px; }
 .page-header h1 { margin-bottom: 6px; font-size: 32px; letter-spacing: -0.04em; }
 .page-header p { margin: 0; color: var(--muted); font-size: 14px; }
+.student-matric-card {
+  margin-bottom: 24px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid #d5e3eb;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #f7fbfe, #edf5fa);
+}
+.student-matric-heading, .profile-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.student-matric-heading .eyebrow, .profile-form-heading .eyebrow { margin-bottom: 4px; }
+.student-matric-heading h3 { margin: 0; }
+.matric-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.matric-status.is-verified { border-color: #b7dfc8; background: #eaf8ef; color: #17653e; }
+.matric-status.is-pending { border-color: #ead9aa; background: #fff8e7; color: #76591a; }
+.matric-status.is-missing { border-color: #e8c9c6; background: #fff2f1; color: #9c3d37; }
+.student-matric-number {
+  margin: 18px 0 5px;
+  color: var(--ink);
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 750;
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+.student-matric-help { max-width: 720px; margin-bottom: 16px; color: var(--muted); font-size: 13px; }
+.profile-section-title { margin: 4px 0 16px; }
+.matric-verification-note {
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  border-left: 3px solid var(--blue);
+  background: #f1f6f9;
+  color: var(--ink);
+  font-size: 13px;
+}
+.matric-verification-note span { color: var(--muted); font-weight: 400; }
+.text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.profile-form-heading { margin-bottom: 16px; }
+.profile-form-heading h2 { margin: 0; font-size: 22px; }
 
 /* Sub-nav / Category Tabs */
 .tab-nav { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; }

@@ -32,17 +32,27 @@ export async function renderProfileModule(container) {
             <button class="button button-primary button-small" type="button" id="edit-profile-btn">Edit Profile</button>
           </div>
 
-          <div class="view-field-group">
-            <div class="view-field">
-              <span class="view-field-label">Matriculation Number</span>
-              <span class="view-field-value">${escapeHtml(profileData.matricNumber) || '<span class="muted">Not set</span>'}</span>
+          <section class="student-matric-card" aria-labelledby="student-matric-title">
+            <div class="student-matric-heading">
+              <div>
+                <p class="eyebrow">Student identification</p>
+                <h3 id="student-matric-title">Matriculation number</h3>
+              </div>
+              <span class="matric-status ${profileData.matricVerified ? "is-verified" : profileData.matricNumber ? "is-pending" : "is-missing"}" role="status">
+                <span aria-hidden="true">${profileData.matricVerified ? "✓" : profileData.matricNumber ? "…" : "!"}</span>
+                ${profileData.matricVerified ? "Verified" : profileData.matricNumber ? "Verification required" : "Not provided"}
+              </span>
             </div>
-            <div class="view-field">
-              <span class="view-field-label">Verification Status</span>
-              <span class="view-field-value">${profileData.matricVerified ? '<span class="result-box" style="display:inline-block; padding:4px 8px;">Verified</span>' : '<span class="error-box" style="display:inline-block; padding:4px 8px;">Unverified</span>'}</span>
-            </div>
-          </div>
+            <p class="student-matric-number">${escapeHtml(profileData.matricNumber || "Add your matriculation number")}</p>
+            <p class="student-matric-help">${profileData.matricVerified
+              ? "Your verified number can be found by other students in messaging."
+              : profileData.matricNumber
+                ? "Your number is saved but is not yet available in messaging. Ask an administrator to verify it. Changing it will require verification again."
+                : "Add the 9-character matriculation number you used to register. An administrator must verify it before it can be found in messaging."}</p>
+            <button class="button button-outline button-small" type="button" id="edit-matric-btn">${profileData.matricNumber ? "Update matriculation number" : "Add matriculation number"}</button>
+          </section>
 
+          <h3 class="profile-section-title">Personal and academic details</h3>
           <div class="view-field-group">
             <div class="view-field">
               <span class="view-field-label">Department</span>
@@ -75,6 +85,76 @@ export async function renderProfileModule(container) {
       `;
 
       container.querySelector("#edit-profile-btn").onclick = () => renderEditMode();
+      container.querySelector("#edit-matric-btn").onclick = () => renderMatricEditMode();
+    }
+
+    function renderMatricEditMode() {
+      container.innerHTML = `
+        <div class="view-card">
+          <div class="profile-form-heading">
+            <div>
+              <p class="eyebrow">Student identification</p>
+              <h2>Matriculation number</h2>
+            </div>
+            <button class="button button-quiet button-small" type="button" id="cancel-matric-btn">Back to profile</button>
+          </div>
+          <p class="muted">Use the same 9-character number you provided during registration. If you change a verified number, it will need administrator verification again.</p>
+          <form class="tool-form" id="matric-edit-form">
+            <label class="field" for="matric-number-input">Matriculation number
+              <input id="matric-number-input" name="matricNumber" required minlength="9" maxlength="24" pattern="[A-Za-z0-9./_ -]{9,24}" autocomplete="off" value="${escapeHtml(profileData.matricNumber)}" placeholder="AFIT12345" aria-describedby="matric-format-help">
+            </label>
+            <small class="muted" id="matric-format-help">Enter exactly 9 letters, numbers, or common separators. Spaces are ignored when saved.</small>
+            <div class="matric-verification-note">
+              <strong>Verification status: ${profileData.matricVerified ? "Verified" : profileData.matricNumber ? "Not verified" : "Not provided"}</strong>
+              <span>Only an administrator can verify this number. Unverified numbers are not searchable in student messaging.</span>
+            </div>
+            <div id="matric-output" class="tool-output" role="status" aria-live="polite"></div>
+            <div class="inline-actions">
+              <button class="button button-primary" type="submit" id="save-matric-btn">Save matriculation number</button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      const form = container.querySelector("#matric-edit-form");
+      const input = container.querySelector("#matric-number-input");
+      const saveButton = container.querySelector("#save-matric-btn");
+      const output = container.querySelector("#matric-output");
+
+      container.querySelector("#cancel-matric-btn").onclick = renderViewMode;
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const matricNumber = input.value.trim().replace(/\s+/g, "").toUpperCase();
+        if (!/^[A-Z0-9./_-]{9}$/.test(matricNumber)) {
+          input.setCustomValidity("Enter exactly 9 letters, numbers, or common separators.");
+          input.reportValidity();
+          input.setCustomValidity("");
+          return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.textContent = "Saving…";
+        output.innerHTML = "";
+        try {
+          const result = await apiRequest("/api/profile/matric", {
+            method: "PUT",
+            body: { matricNumber }
+          });
+          profileData.matricNumber = result.profile.matricNumber || "";
+          profileData.matricVerified = Boolean(result.profile.matricVerified);
+          renderViewMode();
+          const viewMessage = container.querySelector("#profile-view-msg");
+          if (viewMessage) {
+            viewMessage.innerHTML = `<div class="result-box">${profileData.matricVerified
+              ? "Your matriculation number was saved and remains verified."
+              : "Your matriculation number was saved. Ask an administrator to verify it before using it in messaging."}</div>`;
+          }
+        } catch (error) {
+          saveButton.disabled = false;
+          saveButton.textContent = "Save matriculation number";
+          output.innerHTML = `<div class="error-box">${escapeHtml(error.message || "Unable to save the matriculation number. Please try again.")}</div>`;
+        }
+      };
     }
 
     function renderEditMode() {
@@ -86,9 +166,9 @@ export async function renderProfileModule(container) {
               <label class="field">Full Name<input name="name" required value="${escapeHtml(profileData.name)}" placeholder="e.g. David Chukwuma"></label>
               <label class="field">Email Address<input type="email" name="email" value="${escapeHtml(profileData.email)}" disabled readonly></label>
             </div>
-            <div class="form-row">
-              <label class="field">Matriculation Number<input value="${escapeHtml(profileData.matricNumber)}" disabled readonly placeholder="AFIT/23/1234"></label>
-              <label class="field">Verification Status<input value="${profileData.matricVerified ? "Verified" : "Unverified"}" disabled readonly></label>
+            <div class="matric-verification-note">
+              <strong>Matriculation number: ${escapeHtml(profileData.matricNumber || "Not provided")}</strong>
+              <span>${profileData.matricVerified ? "Verified" : "Not verified"} · <button class="text-button" type="button" id="edit-matric-from-profile">Manage matriculation number</button></span>
             </div>
             <div class="form-row">
               <label class="field">Department<input name="department" value="${escapeHtml(profileData.department)}" placeholder="e.g. Computer Science"></label>
@@ -131,6 +211,11 @@ export async function renderProfileModule(container) {
       };
 
       const tracker = createSmartSaveTracker(form, saveBtn, { initialSnapshot: baselineSnapshot });
+      container.querySelector("#edit-matric-from-profile").onclick = () => {
+        if (tracker.hasChanged() && !confirm("You have unsaved profile changes. Discard them and manage your matriculation number?")) return;
+        tracker.destroy();
+        renderMatricEditMode();
+      };
 
       cancelBtn.onclick = () => {
         if (tracker.hasChanged()) {

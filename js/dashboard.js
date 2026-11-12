@@ -93,7 +93,7 @@ const mainPages = [
   { href: "./campus-life.html", title: "11. Campus Life & Directory", category: "Campus", desc: "Hostels, transport shuttles, dining, health center, directory." },
   { href: "./opportunities.html", title: "12. Marketplace & Opportunities", category: "Campus", desc: "Campus marketplace, student gigs, scholarships, lost & found." },
   { href: "./community.html", title: "13. Community & Clubs", category: "Campus", desc: "Clubs & societies, student businesses, feedback portal." },
-  { href: "./profile.html", title: "14. Student Profile", category: "Personal", desc: "Manage display name, department, level, skills, and bio." }
+  { href: "./profile.html", title: "14. Student Profile", category: "Personal", desc: "Manage student details and matriculation number verification." }
 ];
 
 function renderHubCards(searchQuery = "") {
