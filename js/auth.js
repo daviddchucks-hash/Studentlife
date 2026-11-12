@@ -73,7 +73,7 @@ form.addEventListener("submit", async (event) => {
           Authorization: "Bearer " + idToken,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ matricNumber, verified: false })
+        body: JSON.stringify({ matricNumber })
       });
 
       if (!response.ok) {

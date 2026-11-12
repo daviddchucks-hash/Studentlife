@@ -185,6 +185,7 @@ function registerMessagingRoutes(app, {
       const target = await getEligibleProfile(otherUid);
       if (
         !target ||
+        target.profile.matricVerified !== true ||
         typeof target.profile.matricNumber !== "string" ||
         normalizeMatricNumber(target.profile.matricNumber) !== normalized
       ) {

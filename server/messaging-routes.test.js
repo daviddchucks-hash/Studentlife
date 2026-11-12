@@ -135,6 +135,9 @@ test("authenticated messaging routes enforce request, acceptance, messaging, blo
   assert.equal("email" in search.body.user, false);
   assert.equal((await call("studentA", "GET", "/api/messages/search?matric=bad%21")).status, 400);
   assert.equal((await call("studentA", "GET", "/api/messages/search?matric=missing")).status, 404);
+  harness.database.data.users.studentC.profile.matricVerified = false;
+  assert.equal((await call("studentA", "GET", "/api/messages/search?matric=C.300")).status, 404);
+  harness.database.data.users.studentC.profile.matricVerified = true;
 
   const badPayload = await call("studentA", "POST", "/api/messages/requests", {
     recipientUid: "studentB", text: "Hello", requestId: "request_bad", attachment: "file"

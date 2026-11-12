@@ -7,7 +7,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
 const { registerMessagingRoutes } = require("./messaging-routes");
-const { matricLookupKey } = require("./messaging");
+const { updateStudentMatricNumber } = require("./matric");
 const { applySubmissionReward, resolveWithdrawalWallet } = require("./notesync-rewards");
 const { isPublicLostFoundItem, publicLostFoundItem } = require("./public-data");
 const {
@@ -15,8 +15,6 @@ const {
   getDefinition,
   snapshotToList,
   validRecordId,
-  validateMatricNumber,
-  validateRegistrationMatricNumber,
   validateRecord,
   validateFormula,
   validateProfile,
@@ -1070,20 +1068,6 @@ app.get("/api/profile", requireAuth, async (req, res, next) => {
   }
 });
 
-async function findUsersByMatricNumber(matricNumber) {
-  const normalized = String(matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
-  if (!normalized) return [];
-  const snapshot = await database.ref("users").get();
-  const users = snapshot.val() || {};
-  const matches = [];
-  for (const [uid, entry] of Object.entries(users)) {
-    const profile = entry && entry.profile ? entry.profile : {};
-    const value = String(profile.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
-    if (value === normalized) matches.push({ uid, profile });
-  }
-  return matches;
-}
-
 app.get("/api/profile/matric", requireAuth, async (req, res, next) => {
   try {
     const profileSnap = await database.ref(`users/${req.user.uid}/profile`).get();
@@ -1096,52 +1080,7 @@ app.get("/api/profile/matric", requireAuth, async (req, res, next) => {
 
 app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
   try {
-    const payload = req.body || {};
-    const newMatric = payload.matricNumber === undefined ? null : String(payload.matricNumber || "").trim();
-    const requestedVerified = typeof payload.verified === "boolean" ? payload.verified : false;
-    const isAdmin = checkIsAdmin(req.user);
-    if (requestedVerified && !isAdmin) {
-      return res.status(403).json({ error: "Only an administrator can verify a student's matriculation number." });
-    }
-    const normalized = newMatric ? validateMatricNumber(newMatric) : "";
-    const profileRef = database.ref(`users/${req.user.uid}/profile`);
-    const existingSnap = await profileRef.get();
-    const existing = existingSnap.val() || {};
-    if (!existing.matricNumber) validateRegistrationMatricNumber(newMatric);
-    const previousMatric = String(existing.matricNumber || "").trim().replace(/\s+/g, "").toUpperCase();
-    const nextVerified = isAdmin
-      ? requestedVerified
-      : Boolean(existing.matricVerified && normalized && normalized === previousMatric);
-    if (normalized) {
-      const matches = await findUsersByMatricNumber(normalized);
-      if (matches.some((match) => match.uid !== req.user.uid)) {
-        return res.status(409).json({ error: "This matriculation number is already registered to another student." });
-      }
-    }
-    const saved = { ...existing, matricNumber: normalized, matricVerified: nextVerified, updatedAt: Date.now() };
-    let reservedLookup = false;
-    if (normalized && nextVerified) {
-      const lookupRef = database.ref(`matricLookup/${matricLookupKey(normalized)}`);
-      const lookupResult = await lookupRef.transaction((uid) => uid && uid !== req.user.uid ? undefined : req.user.uid);
-      if (!lookupResult.committed) {
-        return res.status(409).json({ error: "This matriculation number is already verified for another student." });
-      }
-      reservedLookup = true;
-    }
-    try {
-      await profileRef.set(saved);
-    } catch (error) {
-      if (reservedLookup && normalized !== previousMatric) {
-        await database.ref(`matricLookup/${matricLookupKey(normalized)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
-      }
-      throw error;
-    }
-    if (previousMatric && previousMatric !== normalized) {
-      await database.ref(`matricLookup/${matricLookupKey(previousMatric)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
-    }
-    if (normalized && !nextVerified) {
-      await database.ref(`matricLookup/${matricLookupKey(normalized)}`).transaction((uid) => uid === req.user.uid ? null : undefined);
-    }
+    const saved = await updateStudentMatricNumber(database, req.user.uid, req.body?.matricNumber);
     res.json({ profile: saved });
   } catch (error) {
     next(error);
@@ -1171,63 +1110,6 @@ registerMessagingRoutes(app, {
   validUid,
   allowMessageSearch,
   allowMessageAction
-});
-
-app.get("/api/admin/matric-verification", requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const snapshot = await database.ref("users").get();
-    const items = [];
-    const users = snapshot.val() || {};
-    for (const [uid, value] of Object.entries(users)) {
-      const profile = value && value.profile ? value.profile : {};
-      if (!profile.matricNumber) continue;
-      items.push({ uid, name: profile.name || "Student", matricNumber: profile.matricNumber, matricVerified: Boolean(profile.matricVerified), department: profile.department || "", level: profile.level || "" });
-    }
-    items.sort((a, b) => a.name.localeCompare(b.name));
-    res.json({ items });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put("/api/admin/users/:uid/matric-verification", requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const uid = String(req.params.uid || "").trim();
-    if (!uid) return res.status(400).json({ error: "A valid student UID is required." });
-    if (typeof req.body?.verified !== "boolean") {
-      return res.status(400).json({ error: "Verification status must be true or false." });
-    }
-    const verified = req.body.verified;
-    const profileRef = database.ref(`users/${uid}/profile`);
-    const existingSnap = await profileRef.get();
-    const existing = existingSnap.val() || {};
-    if (!existing.matricNumber) return res.status(400).json({ error: "This student has no matriculation number to verify." });
-    const matricNumber = validateMatricNumber(existing.matricNumber);
-    const lookupRef = database.ref(`matricLookup/${matricLookupKey(matricNumber)}`);
-    if (verified) {
-      const reservation = await lookupRef.transaction((current) =>
-        current && current !== uid ? undefined : uid
-      );
-      if (!reservation.committed) {
-        return res.status(409).json({ error: "This matriculation number is already verified for another student." });
-      }
-    }
-    const updated = { ...existing, matricVerified: verified, updatedAt: Date.now() };
-    try {
-      await profileRef.set(updated);
-    } catch (error) {
-      if (verified && existing.matricVerified !== true) {
-        await lookupRef.transaction((current) => current === uid ? null : undefined);
-      }
-      throw error;
-    }
-    if (!verified) {
-      await lookupRef.transaction((current) => current === uid ? null : undefined);
-    }
-    res.json({ profile: updated });
-  } catch (error) {
-    next(error);
-  }
 });
 
 app.get("/api/directory", async (req, res, next) => {

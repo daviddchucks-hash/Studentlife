@@ -40,15 +40,15 @@ export async function renderProfileModule(container) {
               </div>
               <span class="matric-status ${profileData.matricVerified ? "is-verified" : profileData.matricNumber ? "is-pending" : "is-missing"}" role="status">
                 <span aria-hidden="true">${profileData.matricVerified ? "✓" : profileData.matricNumber ? "…" : "!"}</span>
-                ${profileData.matricVerified ? "Verified" : profileData.matricNumber ? "Verification required" : "Not provided"}
+                ${profileData.matricVerified ? "Verified for StudentLife" : profileData.matricNumber ? "Needs update" : "Not provided"}
               </span>
             </div>
             <p class="student-matric-number">${escapeHtml(profileData.matricNumber || "Add your matriculation number")}</p>
             <p class="student-matric-help">${profileData.matricVerified
-              ? "Your verified number can be found by other students in messaging."
+              ? "Your unique matriculation number is available to other students in messaging. StudentLife checks its format and uniqueness; this does not confirm it against AFIT records."
               : profileData.matricNumber
-                ? "Your number is saved but is not yet available in messaging. Ask an administrator to verify it. Changing it will require verification again."
-                : "Add the 9-character matriculation number you used to register. An administrator must verify it before it can be found in messaging."}</p>
+                ? "This number was saved before automatic verification was enabled. Save it again to check that it is unique and make it available in messaging."
+                : "Add the 9-character matriculation number you used to register. A unique, valid number is verified automatically and becomes available in messaging."}</p>
             <button class="button button-outline button-small" type="button" id="edit-matric-btn">${profileData.matricNumber ? "Update matriculation number" : "Add matriculation number"}</button>
           </section>
 
@@ -98,7 +98,7 @@ export async function renderProfileModule(container) {
             </div>
             <button class="button button-quiet button-small" type="button" id="cancel-matric-btn">Back to profile</button>
           </div>
-          <p class="muted">Use the same 9-character number you provided during registration. If you change a verified number, it will need administrator verification again.</p>
+          <p class="muted">Enter a valid 9-character matriculation number. StudentLife checks that it is not already in use and verifies it immediately after saving. This is not an independent check against AFIT records.</p>
           <form class="tool-form" id="matric-edit-form">
             <label class="field" for="matric-number-input">Matriculation number
               <input id="matric-number-input" name="matricNumber" required minlength="9" maxlength="24" pattern="[A-Za-z0-9./_ -]{9,24}" autocomplete="off" value="${escapeHtml(profileData.matricNumber)}" placeholder="AFIT12345" aria-describedby="matric-format-help">
@@ -106,7 +106,7 @@ export async function renderProfileModule(container) {
             <small class="muted" id="matric-format-help">Enter exactly 9 letters, numbers, or common separators. Spaces are ignored when saved.</small>
             <div class="matric-verification-note">
               <strong>Verification status: ${profileData.matricVerified ? "Verified" : profileData.matricNumber ? "Not verified" : "Not provided"}</strong>
-              <span>Only an administrator can verify this number. Unverified numbers are not searchable in student messaging.</span>
+              <span>The number is checked for format and uniqueness, then verified automatically for use in StudentLife.</span>
             </div>
             <div id="matric-output" class="tool-output" role="status" aria-live="polite"></div>
             <div class="inline-actions">
@@ -145,9 +145,7 @@ export async function renderProfileModule(container) {
           renderViewMode();
           const viewMessage = container.querySelector("#profile-view-msg");
           if (viewMessage) {
-            viewMessage.innerHTML = `<div class="result-box">${profileData.matricVerified
-              ? "Your matriculation number was saved and remains verified."
-              : "Your matriculation number was saved. Ask an administrator to verify it before using it in messaging."}</div>`;
+            viewMessage.innerHTML = '<div class="result-box">Your matriculation number was saved and verified for use in StudentLife.</div>';
           }
         } catch (error) {
           saveButton.disabled = false;
