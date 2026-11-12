@@ -25,40 +25,61 @@ function waitForInitialAuthState() {
   return initialAuthState;
 }
 
-export async function apiRequest(path, { method = "GET", body, authenticated = true } = {}) {
-  if (!API_BASE_URL) {
-    throw new Error("The Render API URL is not configured. Set API_BASE_URL in js/app-config.js after creating the Render service.");
-  }
+export async function apiRequest(path, { method = "GET", body, authenticated = true, timeoutMs = 60000 } = {}) {
+  const controller = new AbortController();
+  let timeoutId;
 
-  const headers = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (authenticated) {
-    if (!auth.currentUser) await waitForInitialAuthState();
-    const user = auth.currentUser;
-    if (!user) throw new Error("Sign in to continue.");
-    headers.Authorization = "Bearer " + (await user.getIdToken());
-  }
+  const request = async () => {
+    if (!API_BASE_URL) {
+      throw new Error("The Render API URL is not configured. Set API_BASE_URL in js/app-config.js after creating the Render service.");
+    }
 
-  let response;
+    const headers = { Accept: "application/json" };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (authenticated) {
+      if (!auth.currentUser) await waitForInitialAuthState();
+      const user = auth.currentUser;
+      if (!user) throw new Error("Sign in to continue.");
+      headers.Authorization = "Bearer " + (await user.getIdToken());
+    }
+
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        mode: "cors",
+        credentials: "omit",
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new Error("Could not reach the Render API. Check the service URL and try again.");
+    }
+
+    if (response.status === 204) return null;
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error("The API returned an unreadable response.");
+    }
+    if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
+    return result;
+  };
+
   try {
-    response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      mode: "cors",
-      credentials: "omit"
-    });
-  } catch {
-    throw new Error("Could not reach the Render API. Check the service URL and try again.");
+    return await Promise.race([
+      request(),
+      new Promise((resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error("The request timed out. The messaging service may be starting or unavailable. Please try again."));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  if (response.status === 204) return null;
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error("The API returned an unreadable response.");
-  }
-  if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
-  return result;
 }
