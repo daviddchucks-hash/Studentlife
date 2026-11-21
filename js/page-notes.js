@@ -324,7 +324,7 @@ function renderTab(tab) {
             <label class="field">Quiz Title<input name="title" required placeholder="e.g. Calculus Quiz 1"></label>
             <label class="field">Subject Code (optional)<input name="subject" placeholder="e.g. MTH 101"></label>
           </div>
-          <div style="border:1px solid var(--line); padding:14px; border-radius:8px; background:#fafbfc; margin-bottom:10px;">
+          <div style="border:1px solid var(--line); padding:14px; border-radius:8px; background:var(--theme-surface-alt); margin-bottom:10px;">
             <p style="font-weight:700; margin-bottom:8px;">Question 1</p>
             <label class="field">Question Text<input name="q_text" required placeholder="What is the derivative of x²?"></label>
             <div class="form-row" style="margin-top:8px;">
@@ -361,7 +361,7 @@ function renderTab(tab) {
                     <label class="field">Quiz Title<input name="title" required value="${escapeHtml(item.title)}"></label>
                     <label class="field">Subject Code (optional)<input name="subject" value="${escapeHtml(item.subject || "")}"></label>
                   </div>
-                  <div style="border:1px solid var(--line); padding:12px; border-radius:8px; background:#fafbfc;">
+                  <div style="border:1px solid var(--line); padding:12px; border-radius:8px; background:var(--theme-surface-alt);">
                     <label class="field">Question 1 Text<input name="q_text" required value="${escapeHtml(q.question || "")}"></label>
                     <div class="form-row" style="margin-top:6px;">
                       <label class="field">Option A<input name="opt_0" required value="${escapeHtml(opts[0] || "")}"></label>

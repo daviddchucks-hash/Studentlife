@@ -461,6 +461,76 @@ function validateTextMessage(value, maxLength = 2000) {
   return cleaned;
 }
 
+const VALID_THEME_IDS = new Set([
+  "classic-light",
+  "midnight-dark",
+  "blossom-pink",
+  "lavender-dream",
+  "emerald-green",
+  "multicolour-pop",
+  "ocean-breeze",
+  "golden-sand",
+  "sunset-glow",
+  "cyber-neon",
+  "sky-blue",
+  "royal-purple",
+  "custom"
+]);
+
+const VALID_THEME_BG_PRESETS = new Set([
+  "light-crisp",
+  "light-soft",
+  "light-warm",
+  "dark-midnight",
+  "dark-slate"
+]);
+
+function validateThemePreference(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Theme preference must be an object.");
+  const allowedKeys = new Set(["themeId", "customColors", "updatedAt"]);
+  for (const key of Object.keys(data)) {
+    if (!allowedKeys.has(key)) throw new ValidationError("Unsupported theme preference field.");
+  }
+  const themeId = typeof data.themeId === "string" ? data.themeId.trim() : "";
+  if (!VALID_THEME_IDS.has(themeId)) {
+    throw new ValidationError("Choose a valid theme from the studio.");
+  }
+  let customColors = null;
+  if (data.customColors !== undefined && data.customColors !== null) {
+    if (!isPlainObject(data.customColors)) throw new ValidationError("Custom theme colors must be an object.");
+    const allowedColorKeys = new Set(["backgroundPreset", "primaryAccent", "secondaryAccent", "buttonAccent"]);
+    for (const key of Object.keys(data.customColors)) {
+      if (!allowedColorKeys.has(key)) throw new ValidationError("Unsupported custom color option.");
+    }
+    const backgroundPreset = typeof data.customColors.backgroundPreset === "string"
+      ? data.customColors.backgroundPreset.trim()
+      : "light-crisp";
+    if (!VALID_THEME_BG_PRESETS.has(backgroundPreset)) {
+      throw new ValidationError("Choose a valid custom background preset.");
+    }
+    const checkHex = (val, label) => {
+      if (typeof val !== "string" || !/^#[0-9a-fA-F]{6}$/.test(val.trim())) {
+        throw new ValidationError(`${label} must be a valid 6-digit hex color.`);
+      }
+      return val.trim().toLowerCase();
+    };
+    customColors = {
+      backgroundPreset,
+      primaryAccent: checkHex(data.customColors.primaryAccent, "Primary accent color"),
+      secondaryAccent: checkHex(data.customColors.secondaryAccent, "Secondary accent color"),
+      buttonAccent: checkHex(data.customColors.buttonAccent, "Button accent color")
+    };
+  }
+  if (themeId === "custom" && !customColors) {
+    throw new ValidationError("Custom colors are required when activating a custom theme.");
+  }
+  return {
+    themeId,
+    ...(customColors ? { customColors } : {}),
+    updatedAt: Date.now()
+  };
+}
+
 function validateProfile(data) {
   if (!isPlainObject(data)) throw new ValidationError("Profile payload must be an object.");
   if (Object.prototype.hasOwnProperty.call(data, "matricNumber") || Object.prototype.hasOwnProperty.call(data, "matricVerified")) {
@@ -480,6 +550,9 @@ function validateProfile(data) {
     bio: cleanStr(data.bio, 500),
     profilePicture: cleanStr(data.profilePicture, 2000)
   };
+  if (Object.prototype.hasOwnProperty.call(data, "themePreference") && data.themePreference !== undefined) {
+    profile.themePreference = validateThemePreference(data.themePreference);
+  }
   return profile;
 }
 
@@ -936,6 +1009,7 @@ module.exports = {
   validateRecord,
   validateFormula,
   validateProfile,
+  validateThemePreference,
   validateDirectoryItem,
   validateEvent,
   validateMarketplaceListing,

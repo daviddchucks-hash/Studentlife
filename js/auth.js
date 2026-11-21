@@ -6,6 +6,7 @@ import {
   watchAuthState
 } from "./firebase-config.js";
 import { API_BASE_URL } from "./app-config.js";
+import { handleSignOutThemeReset, syncStudentTheme } from "./theme-engine.js";
 
 const form = document.querySelector("#auth-form");
 const message = document.querySelector("#form-message");
@@ -32,6 +33,10 @@ const friendlyErrors = {
 };
 
 watchAuthState((user) => {
+  if (!user && !isSubmitting) {
+    handleSignOutThemeReset();
+    return;
+  }
   if (user && !isSubmitting) window.location.replace("./dashboard.html");
 });
 
@@ -82,9 +87,11 @@ form.addEventListener("submit", async (event) => {
         throw new Error(data.error || "We could not save your matriculation number.");
       }
 
+      await syncStudentTheme(credential.user).catch(() => {});
       window.location.replace("./dashboard.html");
     } else {
-      await signInWithEmail({ email, password });
+      const credential = await signInWithEmail({ email, password });
+      await syncStudentTheme(credential?.user || auth?.currentUser).catch(() => {});
       window.location.replace("./dashboard.html");
     }
   } catch (error) {

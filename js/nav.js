@@ -1,5 +1,6 @@
 import { signOutUser, watchAuthState } from "./firebase-config.js";
 import { apiRequest } from "./api.js";
+import { syncStudentTheme, handleSignOutThemeReset } from "./theme-engine.js";
 
 export function initNavigation(activePage = "") {
   const header = document.querySelector("header.app-header") || document.querySelector("header.site-header");
@@ -39,7 +40,7 @@ export function initNavigation(activePage = "") {
       }).join("")}
     </nav>
     <div class="account-actions">
-      <a href="./profile.html" class="button button-quiet button-small" id="nav-profile-btn">Profile</a>
+      <a href="./profile.html" class="button button-quiet button-small ${activePage === "profile" ? "active" : ""}" id="nav-profile-btn">Settings</a>
       <span class="account-name" id="student-name">Loading…</span>
       <button id="logout-button" class="button button-quiet button-small" type="button">Sign out</button>
     </div>
@@ -54,6 +55,7 @@ export function initNavigation(activePage = "") {
       logoutBtn.textContent = "Signing out…";
       try {
         await signOutUser();
+        handleSignOutThemeReset();
         window.location.replace("./login.html");
       } catch {
         logoutBtn.disabled = false;
@@ -64,6 +66,7 @@ export function initNavigation(activePage = "") {
 
   watchAuthState(async (user) => {
     if (!user) {
+      handleSignOutThemeReset();
       if (currentPath !== "" && currentPath !== "index.html" && currentPath !== "login.html" && currentPath !== "signup.html") {
         window.location.replace("./login.html");
       }
@@ -74,5 +77,7 @@ export function initNavigation(activePage = "") {
       const name = user.displayName || user.email?.split("@")[0] || "Student";
       nameLabel.textContent = name;
     }
+
+    void syncStudentTheme(user);
   });
 }

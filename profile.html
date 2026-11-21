@@ -4,20 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f8fa">
-  <title>Student Profile — AFITStudentLife</title>
+  <title>Settings &amp; Profile — AFITStudentLife</title>
+  <script src="./js/theme-boot.js"></script>
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/dashboard.css">
+  <link rel="stylesheet" href="./css/themes.css">
 </head>
 <body class="dashboard-page">
   <header class="app-header"></header>
   <main class="page-container">
     <section class="page-header">
-      <p class="eyebrow">Your account</p>
-      <h1>Student profile &amp; data</h1>
-      <p>Keep your student details up to date and manage your matriculation verification.</p>
+      <div class="settings-jump-bar">
+        <div>
+          <p class="eyebrow">Your account &amp; preferences</p>
+          <h1>Settings, Profile &amp; Appearance</h1>
+          <p>Manage your student details, matriculation verification, and personalized platform theme.</p>
+        </div>
+        <nav class="settings-tabs" aria-label="Settings sections">
+          <a href="#profile-container" class="settings-tab-link active" data-settings-tab="profile">Student Profile</a>
+          <a href="#themes" class="settings-tab-link" data-settings-tab="themes">Appearance &amp; Themes</a>
+        </nav>
+      </div>
     </section>
 
     <div id="profile-container" class="dashboard-section"></div>
+    <section id="themes" class="dashboard-section theme-studio-section" aria-labelledby="appearance-themes-heading"></section>
   </main>
 
   <footer class="site-footer app-footer">

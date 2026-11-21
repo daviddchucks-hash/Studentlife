@@ -128,7 +128,7 @@ function renderExams() {
         const isPast = days !== null && days < 0;
 
         return `
-          <div class="record-item" style="${isToday ? "border-left:4px solid var(--blue); background:#eaf2f7;" : isPast ? "opacity:0.6;" : ""}">
+          <div class="record-item" style="${isToday ? "border-left:4px solid var(--blue); background:var(--blue-soft);" : isPast ? "opacity:0.6;" : ""}">
             <div>
               <strong>${escapeHtml(item.course)}</strong>
               <small>

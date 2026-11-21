@@ -1,5 +1,6 @@
 import { apiRequest } from "./api.js";
 import { createSmartSaveTracker, getFormSnapshot } from "./smart-save.js";
+import { syncStudentTheme } from "./theme-engine.js";
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -9,6 +10,9 @@ export async function renderProfileModule(container) {
   container.innerHTML = '<p class="muted">Loading student profile…</p>';
   try {
     const data = await apiRequest("/api/me");
+    const syncedTheme = data.uid
+      ? await syncStudentTheme({ uid: data.uid }, data.profile?.themePreference || null).catch(() => null)
+      : null;
     let profileData = {
       name: data.profile?.name || data.name || "",
       email: data.email || "",
@@ -262,7 +266,12 @@ export async function renderProfileModule(container) {
     }
 
     renderViewMode();
+    return {
+      uid: data.uid || "",
+      themePreference: syncedTheme || data.profile?.themePreference || null
+    };
   } catch (err) {
     container.innerHTML = `<div class="error-box">${escapeHtml(err.message || "Failed to load profile.")}</div>`;
+    return null;
   }
 }

@@ -21,6 +21,7 @@ const {
   validateRecord,
   validateFormula,
   validateProfile,
+  validateThemePreference,
   validateDirectoryItem,
   validateEvent,
   validateMarketplaceListing,
@@ -1175,6 +1176,26 @@ app.put("/api/profile/matric", requireAuth, async (req, res, next) => {
   try {
     const saved = await updateStudentMatricNumber(database, req.user.uid, req.body?.matricNumber);
     res.json({ profile: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/profile/theme", requireAuth, async (req, res, next) => {
+  try {
+    const cleanTheme = validateThemePreference(req.body);
+    const now = Date.now();
+    const profileRef = database.ref(`users/${req.user.uid}/profile`);
+    const existingSnap = await profileRef.get();
+    const existing = existingSnap.val() || {};
+    const saved = {
+      ...existing,
+      themePreference: cleanTheme,
+      updatedAt: now,
+      createdAt: existing.createdAt || now
+    };
+    await profileRef.set(saved);
+    res.json({ themePreference: cleanTheme });
   } catch (error) {
     next(error);
   }

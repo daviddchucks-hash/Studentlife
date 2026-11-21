@@ -1,4 +1,4 @@
-﻿import { initNavigation } from "./nav.js";
+import { initNavigation } from "./nav.js";
 import { apiRequest } from "./api.js";
 
 const statusRoot = document.querySelector("#notesync-status");
@@ -29,7 +29,7 @@ function renderEligibilityCard(eligibility) {
     <div class="${tone}">
       <strong>Eligibility:</strong> ${escapeHtml(eligibility.eligible ? "Eligible" : "Not eligible")}
       <div style="margin-top: 8px;">${escapeHtml(message)}</div>
-      <div style="margin-top: 8px; color: #3f4d64;">Level: ${escapeHtml(eligibility.level || "Not set")}</div>
+      <div style="margin-top: 8px; color: var(--muted);">Level: ${escapeHtml(eligibility.level || "Not set")}</div>
     </div>
   `;
 }

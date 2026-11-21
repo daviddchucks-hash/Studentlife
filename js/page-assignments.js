@@ -149,7 +149,7 @@ function renderAssignments() {
         const isOverdue = days !== null && days < 0 && item.status !== "Complete";
 
         return `
-          <div class="record-item" style="${isOverdue ? "border-left:4px solid var(--danger); background:#fff5f5;" : ""}">
+          <div class="record-item" style="${isOverdue ? "border-left:4px solid var(--danger); background:var(--danger-soft);" : ""}">
             <div>
               <strong>${escapeHtml(item.title)} ${item.course ? `(${escapeHtml(item.course)})` : ""}</strong>
               <small>
