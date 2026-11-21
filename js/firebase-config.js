@@ -1,15 +1,18 @@
 import { API_BASE_URL } from "./app-config.js";
 
 const SESSION_KEY = "afit_local_session";
-const listeners = new Set();
+const localListeners = new Set();
+const authSubscribers = new Map();
 
 let firebaseEnabled = false;
+let backendAuthMode = "unknown";
 let firebaseConfig = null;
 let app = null;
-let auth = null;
+let auth = { currentUser: null };
 let database = null;
 let fbAuthMod = null;
 let fbDbMod = null;
+let initPromise = null;
 
 function readStoredSession() {
   if (typeof localStorage === "undefined") return null;
@@ -45,7 +48,7 @@ function writeStoredSession(session) {
   if (auth && !firebaseEnabled) {
     auth.currentUser = user;
   }
-  for (const cb of listeners) {
+  for (const cb of localListeners) {
     try {
       cb(user);
     } catch {
@@ -54,36 +57,95 @@ function writeStoredSession(session) {
   }
 }
 
-if (typeof window !== "undefined") {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/config`, { headers: { Accept: "application/json" } });
-    if (res.ok) {
-      const cfg = await res.json();
-      if (cfg?.firebaseEnabled && cfg?.firebaseConfig?.apiKey) {
-        firebaseConfig = cfg.firebaseConfig;
-        const [fbApp, fbAuth, fbDb] = await Promise.all([
-          import("https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js"),
-          import("https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js"),
-          import("https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js")
-        ]);
-        fbAuthMod = fbAuth;
-        fbDbMod = fbDb;
-        app = fbApp.initializeApp(firebaseConfig);
-        auth = fbAuth.getAuth(app);
-        database = fbDb.getDatabase(app);
-        firebaseEnabled = true;
+async function fetchBackendConfig() {
+  const baseUrl = String(API_BASE_URL || "").replace(/\/+$/, "");
+  if (!baseUrl) return null;
+  const maxAttempts = 2;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 25000) : null;
+    try {
+      const response = await fetch(`${baseUrl}/api/config`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: controller?.signal
+      });
+      if (response.ok) {
+        return await response.json();
       }
+    } catch {
+      // Retry once on transient cold-start or network failure
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
-  } catch {
-    firebaseEnabled = false;
+    if (attempt + 1 < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+  }
+  return null;
+}
+
+function bindQueuedFirebaseSubscribers() {
+  if (!firebaseEnabled || !fbAuthMod) return;
+  for (const [entry, info] of authSubscribers.entries()) {
+    if (info.unsub) continue;
+    localListeners.delete(info.callback);
+    info.unsub = fbAuthMod.onAuthStateChanged(auth, info.callback, info.errorCallback);
+    authSubscribers.set(entry, info);
   }
 }
 
-if (!firebaseEnabled) {
-  const initialSession = readStoredSession();
-  auth = {
-    currentUser: makeLocalUser(initialSession)
-  };
+async function initializeFirebaseClient() {
+  if (typeof window === "undefined") return false;
+  if (firebaseEnabled && fbAuthMod) return true;
+
+  const cfg = await fetchBackendConfig();
+  if (!cfg) {
+    backendAuthMode = "unknown";
+    return false;
+  }
+
+  backendAuthMode = cfg.mode === "in-memory" ? "in-memory" : "firebase";
+
+  if (cfg.firebaseEnabled && cfg.firebaseConfig?.apiKey) {
+    firebaseConfig = cfg.firebaseConfig;
+    const [fbApp, fbAuth, fbDb] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js")
+    ]);
+    fbAuthMod = fbAuth;
+    fbDbMod = fbDb;
+    app = fbApp.getApps?.().length ? fbApp.getApp() : fbApp.initializeApp(firebaseConfig);
+    auth = fbAuth.getAuth(app);
+    database = fbDb.getDatabase(app);
+    firebaseEnabled = true;
+    bindQueuedFirebaseSubscribers();
+    return true;
+  }
+
+  if (backendAuthMode === "in-memory") {
+    const initialSession = readStoredSession();
+    auth = {
+      currentUser: makeLocalUser(initialSession)
+    };
+  }
+  return false;
+}
+
+export async function ensureFirebaseInitialized({ forceRetry = false } = {}) {
+  if (firebaseEnabled && fbAuthMod) return true;
+  if (!forceRetry && initPromise) return initPromise;
+  if (!initPromise || forceRetry) {
+    initPromise = initializeFirebaseClient().finally(() => {
+      if (!firebaseEnabled) initPromise = null;
+    });
+  }
+  return initPromise;
+}
+
+if (typeof window !== "undefined") {
+  await ensureFirebaseInitialized();
 }
 
 export { app, auth, database, firebaseConfig, firebaseEnabled };
@@ -92,30 +154,77 @@ export function watchAuthState(callback, errorCallback) {
   if (firebaseEnabled && fbAuthMod) {
     return fbAuthMod.onAuthStateChanged(auth, callback, errorCallback);
   }
-  listeners.add(callback);
-  const current = makeLocalUser(readStoredSession());
-  auth.currentUser = current;
-  queueMicrotask(() => {
-    if (listeners.has(callback)) callback(current);
+
+  if (backendAuthMode === "in-memory") {
+    localListeners.add(callback);
+    const current = makeLocalUser(readStoredSession());
+    auth.currentUser = current;
+    queueMicrotask(() => {
+      if (localListeners.has(callback)) callback(current);
+    });
+    return () => {
+      localListeners.delete(callback);
+    };
+  }
+
+  // Backend config may still be waking up on initial page load; subscribe once Firebase initializes
+  const token = Symbol("auth-subscriber");
+  const entry = { callback, errorCallback, unsub: null };
+  authSubscribers.set(token, entry);
+
+  ensureFirebaseInitialized().then((ready) => {
+    const active = authSubscribers.get(token);
+    if (!active) return;
+    if (ready && firebaseEnabled && fbAuthMod) {
+      if (!active.unsub) {
+        active.unsub = fbAuthMod.onAuthStateChanged(auth, callback, errorCallback);
+      }
+      return;
+    }
+    if (backendAuthMode === "in-memory") {
+      localListeners.add(callback);
+      const current = makeLocalUser(readStoredSession());
+      auth.currentUser = current;
+      callback(current);
+      return;
+    }
+    callback(null);
+  }).catch(() => {
+    if (authSubscribers.has(token)) callback(null);
   });
+
   return () => {
-    listeners.delete(callback);
+    const existing = authSubscribers.get(token);
+    authSubscribers.delete(token);
+    localListeners.delete(callback);
+    if (existing?.unsub) existing.unsub();
   };
 }
 
 export async function setAuthPersistence() {
+  await ensureFirebaseInitialized({ forceRetry: !firebaseEnabled && backendAuthMode !== "in-memory" });
   if (firebaseEnabled && fbAuthMod) {
     await fbAuthMod.setPersistence(auth, fbAuthMod.browserLocalPersistence);
   }
 }
 
 export async function signUpWithEmail({ name, email, password }) {
+  await ensureFirebaseInitialized({ forceRetry: !firebaseEnabled && backendAuthMode !== "in-memory" });
   if (firebaseEnabled && fbAuthMod) {
     const credential = await fbAuthMod.createUserWithEmailAndPassword(auth, email, password);
     if (name) await fbAuthMod.updateProfile(credential.user, { displayName: name });
     return credential;
   }
-  const response = await fetch(`${API_BASE_URL}/api/local-auth/signup`, {
+
+  if (backendAuthMode !== "in-memory") {
+    throw new Error(
+      backendAuthMode === "firebase"
+        ? "Firebase Web configuration is unavailable on the server. Set FIREBASE_API_KEY in the Render environment variables and try again."
+        : "Could not reach the authentication server. Wait a moment and try again."
+    );
+  }
+
+  const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/api/local-auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ name, email, password })
@@ -129,10 +238,20 @@ export async function signUpWithEmail({ name, email, password }) {
 }
 
 export async function signInWithEmail({ email, password }) {
+  await ensureFirebaseInitialized({ forceRetry: !firebaseEnabled && backendAuthMode !== "in-memory" });
   if (firebaseEnabled && fbAuthMod) {
     return fbAuthMod.signInWithEmailAndPassword(auth, email, password);
   }
-  const response = await fetch(`${API_BASE_URL}/api/local-auth/login`, {
+
+  if (backendAuthMode !== "in-memory") {
+    throw new Error(
+      backendAuthMode === "firebase"
+        ? "Firebase Web configuration is unavailable on the server. Set FIREBASE_API_KEY in the Render environment variables and try again."
+        : "Could not reach the authentication server. Wait a moment and try again."
+    );
+  }
+
+  const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/api/local-auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ email, password })

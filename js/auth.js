@@ -9,7 +9,7 @@ import { API_BASE_URL } from "./app-config.js";
 
 const form = document.querySelector("#auth-form");
 const message = document.querySelector("#form-message");
-const isSignup = window.location.pathname.endsWith("/signup.html");
+const isSignup = Boolean(form?.querySelector('input[name="confirmPassword"]')) || window.location.pathname.endsWith("/signup.html");
 const submitButton = form.querySelector('button[type="submit"]');
 let isSubmitting = false;
 
@@ -22,9 +22,13 @@ const friendlyErrors = {
   "auth/email-already-in-use": "An account already uses this email. Try signing in instead.",
   "auth/invalid-email": "Enter a valid email address.",
   "auth/invalid-credential": "That email and password combination was not recognized.",
+  "auth/user-not-found": "That email and password combination was not recognized.",
+  "auth/wrong-password": "That email and password combination was not recognized.",
+  "auth/user-disabled": "This student account has been disabled.",
   "auth/weak-password": "Choose a stronger password with at least 6 characters.",
   "auth/network-request-failed": "Connection failed. Check your internet and try again.",
-  "auth/too-many-requests": "Too many attempts. Wait a little and try again."
+  "auth/too-many-requests": "Too many attempts. Wait a little and try again.",
+  "auth/unauthorized-domain": "This domain is not authorized in Firebase Authentication."
 };
 
 watchAuthState((user) => {
@@ -88,6 +92,6 @@ form.addEventListener("submit", async (event) => {
     isSubmitting = false;
     submitButton.disabled = false;
     submitButton.textContent = isSignup ? "Create account" : "Sign in";
-    if (auth.currentUser) window.location.replace("./dashboard.html");
+    if (!isSignup && auth?.currentUser) window.location.replace("./dashboard.html");
   }
 });

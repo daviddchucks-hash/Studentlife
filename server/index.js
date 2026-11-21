@@ -7,6 +7,7 @@ const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { createMockDatabase, createMockAuth } = require("./mock-firebase");
+const { createFirebaseWebConfigResolver } = require("./firebase-web-config");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
 const { registerMessagingRoutes } = require("./messaging-routes");
 const { updateStudentMatricNumber } = require("./matric");
@@ -44,9 +45,11 @@ const {
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 const databaseURL = process.env.FIREBASE_DATABASE_URL;
+let adminApp = null;
 let firebaseAuth;
 let database;
 let usingMockFirebase = false;
+let resolvedProjectId = "";
 
 if (serviceAccountJson && databaseURL) {
   let serviceAccount;
@@ -67,7 +70,8 @@ if (serviceAccountJson && databaseURL) {
     throw new Error("FIREBASE_DATABASE_URL must be the HTTPS URL shown in Firebase Console.");
   }
 
-  const adminApp = getApps()[0] || initializeApp({
+  resolvedProjectId = projectId;
+  adminApp = getApps()[0] || initializeApp({
     credential: cert({
       projectId,
       clientEmail,
@@ -83,6 +87,10 @@ if (serviceAccountJson && databaseURL) {
   database = createMockDatabase();
   firebaseAuth = createMockAuth(database);
 }
+
+const resolveFirebaseWebConfig = usingMockFirebase
+  ? async () => null
+  : createFirebaseWebConfigResolver({ adminApp, projectId: resolvedProjectId, databaseURL });
 
 const app = express();
 const allowedOrigins = (process.env.FRONTEND_ORIGINS || "https://daviddchucks-hash.github.io")
@@ -230,23 +238,28 @@ function daysFromToday(dateValue) {
 
 app.get("/api/health", (req, res) => res.json({ ok: true, service: "afitstudentlife-api", mode: usingMockFirebase ? "in-memory" : "firebase" }));
 
-app.get("/api/config", (req, res) => {
-  const apiKey = process.env.FIREBASE_API_KEY || "";
-  if (apiKey && !usingMockFirebase) {
+app.get("/api/config", async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    if (usingMockFirebase) {
+      return res.json({ mode: "in-memory", firebaseEnabled: false, firebaseConfig: null });
+    }
+    const firebaseConfig = await resolveFirebaseWebConfig();
+    if (firebaseConfig?.apiKey) {
+      return res.json({
+        mode: "firebase",
+        firebaseEnabled: true,
+        firebaseConfig
+      });
+    }
     return res.json({
-      firebaseEnabled: true,
-      firebaseConfig: {
-        apiKey,
-        authDomain: "student-life-643be.firebaseapp.com",
-        projectId: "student-life-643be",
-        storageBucket: "student-life-643be.firebasestorage.app",
-        messagingSenderId: "703601899893",
-        appId: "1:703601899893:web:fbe9cf5b4f4df1dc54fb3c",
-        databaseURL: process.env.FIREBASE_DATABASE_URL || undefined
-      }
+      mode: "firebase",
+      firebaseEnabled: false,
+      firebaseConfig: null
     });
+  } catch (error) {
+    next(error);
   }
-  res.json({ firebaseEnabled: false, firebaseConfig: null });
 });
 
 app.post("/api/local-auth/signup", async (req, res, next) => {
