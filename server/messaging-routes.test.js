@@ -51,6 +51,28 @@ class FakeReference {
   }
   remove() { return this.set(null); }
   transaction(update) {
+    if (this.database.optimisticNullFirstPass) {
+      // Simulate Firebase RTDB uncached node transaction behavior:
+      // Pass 1 receives `null`; returning `undefined` aborts immediately without reading server state.
+      const optimistic = update(null);
+      if (optimistic === undefined) {
+        return Promise.resolve({ committed: false, snapshot: new Snapshot(null) });
+      }
+      const serverCurrent = clone(readPath(this.database.data, this.path) ?? null);
+      if (serverCurrent === null) {
+        if (this.path) writePath(this.database.data, this.path, optimistic);
+        else this.database.data = clone(optimistic);
+        return Promise.resolve({ committed: true, snapshot: new Snapshot(optimistic) });
+      }
+      // Server state differs from optimistic `null` baseline -> datastale retry with real server value
+      const retryNext = update(clone(serverCurrent));
+      if (retryNext === undefined) {
+        return Promise.resolve({ committed: false, snapshot: new Snapshot(serverCurrent) });
+      }
+      if (this.path) writePath(this.database.data, this.path, retryNext);
+      else this.database.data = clone(retryNext);
+      return Promise.resolve({ committed: true, snapshot: new Snapshot(retryNext) });
+    }
     const current = clone(readPath(this.database.data, this.path) ?? null);
     const next = update(current);
     if (next === undefined) return Promise.resolve({ committed: false, snapshot: new Snapshot(current) });
@@ -63,11 +85,14 @@ class FakeReference {
 }
 
 class FakeDatabase {
-  constructor(data) { this.data = clone(data); }
+  constructor(data, options = {}) {
+    this.data = clone(data);
+    this.optimisticNullFirstPass = Boolean(options.optimisticNullFirstPass);
+  }
   ref(path = "") { return new FakeReference(this, path); }
 }
 
-function createHarness() {
+function createHarness(options = {}) {
   const users = {
     studentA: { profile: { name: "Student A", department: "Computing", level: "100", matricNumber: "A-100", matricVerified: true, email: "private-a@example.test", phone: "111" } },
     studentB: { profile: { name: "Student B", department: "Engineering", level: "200", matricNumber: "B/200", matricVerified: true, email: "private-b@example.test", phone: "222" } },
@@ -80,7 +105,7 @@ function createHarness() {
       [matricLookupKey("B/200")]: "studentB",
       [matricLookupKey("C.300")]: "studentC"
     }
-  });
+  }, options);
   const app = express();
   app.use(express.json());
   const requireAuth = (req, res, next) => {
@@ -150,7 +175,10 @@ test("authenticated messaging routes enforce request, acceptance, messaging, blo
   assert.equal(created.status, 201);
   assert.equal(created.body.status, "pending");
   assert.equal((await call("studentB", "GET", "/api/messages/requests")).body.items.length, 1);
-  assert.equal((await call("studentA", "GET", "/api/messages/requests")).body.items.length, 0);
+  const studentARequestsBefore = await call("studentA", "GET", "/api/messages/requests");
+  assert.equal(studentARequestsBefore.body.items.length, 0);
+  assert.equal(studentARequestsBefore.body.outgoing.length, 1);
+  assert.equal(studentARequestsBefore.body.outgoing[0].status, "pending");
   assert.equal((await call("studentB", "GET", "/api/messages/notifications")).body.items.length, 1);
   assert.equal((await call("studentC", "POST", "/api/messages/notifications/request-request_one/read")).status, 404);
   assert.equal((await call("studentA", "POST", "/api/messages/requests", {
@@ -163,8 +191,12 @@ test("authenticated messaging routes enforce request, acceptance, messaging, blo
   const id = accepted.body.conversation.id;
   assert.equal(accepted.body.conversation.otherUid, "studentA");
   assert.equal((await call("studentA", "GET", "/api/messages/notifications")).body.items[0].type, "message-request-accepted");
+  assert.equal((await call("studentA", "GET", "/api/messages/requests")).body.outgoing[0].status, "accepted");
+  assert.equal((await call("studentB", "GET", "/api/messages/requests")).body.items.length, 0);
   assert.equal((await call("studentA", "GET", "/api/messages/conversations")).body.items[0].id, id);
+  assert.equal((await call("studentA", "GET", "/api/messages/conversations")).body.items[0].otherName, "Student B");
   assert.equal((await call("studentB", "GET", "/api/messages/conversations")).body.items[0].id, id);
+  assert.equal((await call("studentB", "GET", "/api/messages/conversations")).body.items[0].otherName, "Student A");
 
   const messagePayload = { text: "A private text message", messageId: "message_one" };
   assert.equal((await call("studentA", "POST", `/api/messages/conversations/${id}/messages`, messagePayload)).status, 201);
@@ -180,6 +212,7 @@ test("authenticated messaging routes enforce request, acceptance, messaging, blo
   assert.equal((await call("studentA", "POST", `/api/messages/conversations/${id}/messages`, { ...messagePayload, text: "x", attachment: {} })).status, 400);
 
   assert.equal((await call("studentB", "POST", "/api/messages/blocked", { otherUid: "studentA" })).status, 200);
+  assert.equal((await call("studentA", "GET", "/api/messages/requests")).body.outgoing[0].status, "blocked");
   assert.equal((await call("studentA", "POST", `/api/messages/conversations/${id}/messages`, { text: "Blocked", messageId: "message_after_block" })).status, 403);
   assert.equal((await call("studentA", "POST", "/api/messages/requests", { recipientUid: "studentB", text: "Again", requestId: "request_two" })).status, 403);
   assert.equal((await call("studentB", "GET", "/api/messages/blocked")).body.items[0].uid, "studentA");
@@ -187,6 +220,117 @@ test("authenticated messaging routes enforce request, acceptance, messaging, blo
 
   assert.equal((await call("studentB", "DELETE", "/api/messages/blocked/studentA")).status, 200);
   assert.equal((await call("studentB", "GET", "/api/messages/conversations")).body.items.length, 1);
+});
+
+test("Firebase optimistic null-first-pass transactions complete acceptance, sync both accounts, handle duplicate accepts, decline, block, and reject unauthorized actors", async (t) => {
+  const harness = createHarness({ optimisticNullFirstPass: true });
+  const server = harness.app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  async function call(uid, method, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        ...(uid ? { Authorization: `Bearer ${uid}` } : {}),
+        ...(body === undefined ? {} : { "Content-Type": "application/json" })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    return { status: response.status, body: await response.json() };
+  }
+
+  // Scenario G: unauthenticated request rejected
+  assert.equal((await call("", "POST", "/api/messages/requests", { recipientUid: "studentB", text: "Hi", requestId: "unauth_1" })).status, 401);
+
+  // Scenario A: Send + Accept with optimistic null-first-pass transactions
+  const sendRes = await call("studentA", "POST", "/api/messages/requests", {
+    recipientUid: "studentB", text: "Hey Student B, let's study together", requestId: "req_opt_1"
+  });
+  assert.equal(sendRes.status, 201);
+
+  // Scenario G: Unauthorized third student cannot accept/decline/block
+  assert.equal((await call("studentC", "PUT", "/api/messages/requests/req_opt_1", { status: "accepted" })).status, 403);
+  assert.equal((await call("studentC", "PUT", "/api/messages/requests/req_opt_1", { status: "declined" })).status, 403);
+  assert.equal((await call("studentC", "PUT", "/api/messages/requests/req_opt_1", { status: "blocked" })).status, 403);
+
+  // Scenario D: Concurrent / duplicate accept calls
+  const [accept1, accept2] = await Promise.all([
+    call("studentB", "PUT", "/api/messages/requests/req_opt_1", { status: "accepted" }),
+    call("studentB", "PUT", "/api/messages/requests/req_opt_1", { status: "accepted" })
+  ]);
+  assert.equal(accept1.status, 200);
+  assert.equal(accept2.status, 200);
+  assert.equal(accept1.body.status, "accepted");
+  assert.equal(accept2.body.status, "accepted");
+  assert.equal(accept1.body.conversation.id, accept2.body.conversation.id);
+  const convId = accept1.body.conversation.id;
+
+  // Scenario F: Verify real-time RTDB nodes are synchronized on both accounts without refresh
+  const rtdb = harness.database.data.messaging;
+  assert.equal(rtdb.userRequests?.studentB?.req_opt_1, undefined);
+  assert.equal(rtdb.outgoingRequests.studentA.req_opt_1.status, "accepted");
+  assert.equal(rtdb.outgoingRequests.studentA.req_opt_1.conversationId, convId);
+  assert.equal(rtdb.userConversations.studentA[convId].otherName, "Student B");
+  assert.equal(rtdb.userConversations.studentB[convId].otherName, "Student A");
+  assert.equal(rtdb.conversationAccess.studentA[convId], true);
+  assert.equal(rtdb.conversationAccess.studentB[convId], true);
+  assert.equal(rtdb.notifications.studentA["accepted-req_opt_1"].type, "message-request-accepted");
+  assert.equal(rtdb.notifications.studentA["accepted-req_opt_1"].conversationId, convId);
+
+  // Trying to decline or block an already accepted request returns accurate message
+  const lateDecline = await call("studentB", "PUT", "/api/messages/requests/req_opt_1", { status: "declined" });
+  assert.equal(lateDecline.status, 409);
+  assert.equal(lateDecline.body.error, "This message request was already accepted.");
+
+  // Two-way messaging works with optimistic null-first-pass transactions & unread counts update cleanly
+  assert.equal((await call("studentA", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Glad you accepted!", messageId: "msg_opt_1"
+  })).status, 201);
+  assert.equal((await call("studentB", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Happy to connect!", messageId: "msg_opt_2"
+  })).status, 201);
+  assert.equal((await call("studentB", "POST", `/api/messages/conversations/${convId}/read`)).status, 200);
+  assert.equal(rtdb.userConversations.studentB[convId].unreadCount, 0);
+
+  // Scenario E: Fresh reads simulating reload/re-login preserve single conversation and full history
+  const connsA = await call("studentA", "GET", "/api/messages/conversations");
+  const connsB = await call("studentB", "GET", "/api/messages/conversations");
+  assert.equal(connsA.body.items.length, 1);
+  assert.equal(connsB.body.items.length, 1);
+  const msgs = await call("studentA", "GET", `/api/messages/conversations/${convId}/messages`);
+  assert.deepEqual(msgs.body.messages.map((m) => m.text), [
+    "Hey Student B, let's study together",
+    "Glad you accepted!",
+    "Happy to connect!"
+  ]);
+
+  // Scenario B: Decline syncs outgoingRequests and removes userRequests, does not create conversation
+  assert.equal((await call("studentC", "POST", "/api/messages/requests", {
+    recipientUid: "studentA", text: "Hi A", requestId: "req_decline_1"
+  })).status, 201);
+  const declined = await call("studentA", "PUT", "/api/messages/requests/req_decline_1", { status: "declined" });
+  assert.equal(declined.status, 200);
+  assert.equal(declined.body.status, "declined");
+  assert.equal(rtdb.userRequests?.studentA?.req_decline_1, undefined);
+  assert.equal(rtdb.outgoingRequests.studentC.req_decline_1.status, "declined");
+  assert.equal(rtdb.notifications.studentC["declined-req_decline_1"].type, "message-request-declined");
+  assert.equal((await call("studentC", "GET", "/api/messages/conversations")).body.items.length, 0);
+  const acceptAfterDecline = await call("studentA", "PUT", "/api/messages/requests/req_decline_1", { status: "accepted" });
+  assert.equal(acceptAfterDecline.status, 409);
+  assert.equal(acceptAfterDecline.body.error, "This message request was already declined.");
+
+  // Scenario C: Blocking from incoming request blocks search, future requests, and syncs outgoingRequests
+  assert.equal((await call("studentC", "POST", "/api/messages/requests", {
+    recipientUid: "studentB", text: "Hi B", requestId: "req_block_1"
+  })).status, 201);
+  const blocked = await call("studentB", "PUT", "/api/messages/requests/req_block_1", { status: "blocked" });
+  assert.equal(blocked.status, 200);
+  assert.equal(rtdb.outgoingRequests.studentC.req_block_1.status, "blocked");
+  assert.equal((await call("studentC", "GET", "/api/messages/search?matric=B%2F200")).status, 403);
+  assert.equal((await call("studentC", "POST", "/api/messages/requests", {
+    recipientUid: "studentB", text: "Ping", requestId: "req_block_2"
+  })).status, 403);
 });
 
 test("declined requests cannot be continued or resent during the cooldown", async (t) => {

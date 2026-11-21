@@ -1,10 +1,12 @@
 "use strict";
 
 const { createHash } = require("node:crypto");
+const path = require("node:path");
 const express = require("express");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
+const { createMockDatabase, createMockAuth } = require("./mock-firebase");
 const { registerCourseMateRoutes, refreshCourseIndex } = require("./coursemate");
 const { registerMessagingRoutes } = require("./messaging-routes");
 const { updateStudentMatricNumber } = require("./matric");
@@ -42,41 +44,63 @@ const {
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 const databaseURL = process.env.FIREBASE_DATABASE_URL;
-if (!serviceAccountJson || !databaseURL) {
-  throw new Error("Set FIREBASE_SERVICE_ACCOUNT_JSON and FIREBASE_DATABASE_URL in the Render environment.");
+let firebaseAuth;
+let database;
+let usingMockFirebase = false;
+
+if (serviceAccountJson && databaseURL) {
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson);
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must contain valid JSON.");
+  }
+  const projectId = serviceAccount.projectId || serviceAccount.project_id;
+  const clientEmail = serviceAccount.clientEmail || serviceAccount.client_email;
+  const privateKey = serviceAccount.privateKey || serviceAccount.private_key;
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Firebase service account JSON is missing required fields.");
+  }
+  try {
+    if (new URL(databaseURL).protocol !== "https:") throw new Error();
+  } catch {
+    throw new Error("FIREBASE_DATABASE_URL must be the HTTPS URL shown in Firebase Console.");
+  }
+
+  const adminApp = getApps()[0] || initializeApp({
+    credential: cert({
+      projectId,
+      clientEmail,
+      privateKey: String(privateKey).replace(/\\n/g, "\n")
+    }),
+    databaseURL
+  });
+  firebaseAuth = getAuth(adminApp);
+  database = getDatabase(adminApp);
+} else {
+  usingMockFirebase = true;
+  console.warn("[AI Studio] FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_DATABASE_URL not set — using in-memory Firebase mock.");
+  database = createMockDatabase();
+  firebaseAuth = createMockAuth(database);
 }
 
-let serviceAccount;
-try {
-  serviceAccount = JSON.parse(serviceAccountJson);
-} catch {
-  throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must contain valid JSON.");
-}
-const projectId = serviceAccount.projectId || serviceAccount.project_id;
-const clientEmail = serviceAccount.clientEmail || serviceAccount.client_email;
-const privateKey = serviceAccount.privateKey || serviceAccount.private_key;
-if (!projectId || !clientEmail || !privateKey) {
-  throw new Error("Firebase service account JSON is missing required fields.");
-}
-try {
-  if (new URL(databaseURL).protocol !== "https:") throw new Error();
-} catch {
-  throw new Error("FIREBASE_DATABASE_URL must be the HTTPS URL shown in Firebase Console.");
-}
-
-const adminApp = getApps()[0] || initializeApp({
-  credential: cert({
-    projectId,
-    clientEmail,
-    privateKey: String(privateKey).replace(/\\n/g, "\n")
-  }),
-  databaseURL
-});
-const firebaseAuth = getAuth(adminApp);
-const database = getDatabase(adminApp);
 const app = express();
 const allowedOrigins = (process.env.FRONTEND_ORIGINS || "https://daviddchucks-hash.github.io")
   .split(",").map((origin) => origin.trim()).filter(Boolean);
+
+function isAllowedOrigin(origin, req) {
+  if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) return true;
+  const host = req.get("host");
+  if (host) {
+    try {
+      const originHost = new URL(origin).host;
+      if (originHost === host) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -86,7 +110,7 @@ app.use((req, res, next) => {
   res.set("Vary", "Origin");
   const origin = req.headers.origin;
   if (origin) {
-    if (!allowedOrigins.includes(origin)) return res.status(403).json({ error: "This website is not allowed to use the API." });
+    if (!isAllowedOrigin(origin, req)) return res.status(403).json({ error: "This website is not allowed to use the API." });
     res.set("Access-Control-Allow-Origin", origin);
     res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
     res.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -204,7 +228,63 @@ function daysFromToday(dateValue) {
   return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(todayYear, todayMonth - 1, todayDay)) / 86_400_000);
 }
 
-app.get("/api/health", (req, res) => res.json({ ok: true, service: "afitstudentlife-api" }));
+app.get("/api/health", (req, res) => res.json({ ok: true, service: "afitstudentlife-api", mode: usingMockFirebase ? "in-memory" : "firebase" }));
+
+app.get("/api/config", (req, res) => {
+  const apiKey = process.env.FIREBASE_API_KEY || "";
+  if (apiKey && !usingMockFirebase) {
+    return res.json({
+      firebaseEnabled: true,
+      firebaseConfig: {
+        apiKey,
+        authDomain: "student-life-643be.firebaseapp.com",
+        projectId: "student-life-643be",
+        storageBucket: "student-life-643be.firebasestorage.app",
+        messagingSenderId: "703601899893",
+        appId: "1:703601899893:web:fbe9cf5b4f4df1dc54fb3c",
+        databaseURL: process.env.FIREBASE_DATABASE_URL || undefined
+      }
+    });
+  }
+  res.json({ firebaseEnabled: false, firebaseConfig: null });
+});
+
+app.post("/api/local-auth/signup", async (req, res, next) => {
+  try {
+    if (!usingMockFirebase) {
+      return res.status(400).json({ error: "Use Firebase Authentication to sign up." });
+    }
+    const result = await firebaseAuth.registerUser({
+      name: req.body?.name,
+      email: req.body?.email,
+      password: req.body?.password
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    if (error.code) {
+      return res.status(error.statusCode || 400).json({ error: error.message, code: error.code });
+    }
+    next(error);
+  }
+});
+
+app.post("/api/local-auth/login", async (req, res, next) => {
+  try {
+    if (!usingMockFirebase) {
+      return res.status(400).json({ error: "Use Firebase Authentication to sign in." });
+    }
+    const result = await firebaseAuth.loginUser({
+      email: req.body?.email,
+      password: req.body?.password
+    });
+    res.json(result);
+  } catch (error) {
+    if (error.code) {
+      return res.status(error.statusCode || 401).json({ error: error.message, code: error.code });
+    }
+    next(error);
+  }
+});
 
 async function getProfileSnapshot(uid) {
   const snap = await database.ref(`users/${uid}/profile`).get();
@@ -2150,6 +2230,45 @@ app.delete("/api/records/:type/:id", requireAuth, async (req, res, next) => {
 registerCourseMateRoutes(app, { database, requireAuth, requireAdmin });
 
 app.use("/api", (req, res) => res.status(404).json({ error: "API route not found." }));
+
+const staticRoot = path.join(__dirname, "..");
+const allowedHtmlPages = new Set([
+  "index.html",
+  "login.html",
+  "signup.html",
+  "dashboard.html",
+  "assignments.html",
+  "calculators.html",
+  "campus-life.html",
+  "community.html",
+  "coursemate.html",
+  "courses.html",
+  "exams.html",
+  "formula-library.html",
+  "messages.html",
+  "notes.html",
+  "notesync.html",
+  "opportunities.html",
+  "profile.html",
+  "saved-items.html",
+  "study.html",
+  "timetable.html"
+]);
+
+app.use("/css", express.static(path.join(staticRoot, "css")));
+app.use("/js", express.static(path.join(staticRoot, "js")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(staticRoot, "index.html"));
+});
+
+app.get("/:page", (req, res, next) => {
+  if (allowedHtmlPages.has(req.params.page)) {
+    return res.sendFile(path.join(staticRoot, req.params.page));
+  }
+  next();
+});
+
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
@@ -2165,5 +2284,5 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: "The request could not be completed. Try again shortly." });
 });
 
-const port = Number(process.env.PORT) || 10000;
+const port = Number(process.env.PORT) || 3000;
 app.listen(port, "0.0.0.0", () => console.log(`AFITStudentLife API listening on port ${port}`));

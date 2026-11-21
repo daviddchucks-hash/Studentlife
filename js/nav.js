@@ -1,5 +1,4 @@
-import { auth } from "./firebase-config.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { signOutUser, watchAuthState } from "./firebase-config.js";
 import { apiRequest } from "./api.js";
 
 export function initNavigation(activePage = "") {
@@ -54,7 +53,7 @@ export function initNavigation(activePage = "") {
       logoutBtn.disabled = true;
       logoutBtn.textContent = "Signing out…";
       try {
-        await signOut(auth);
+        await signOutUser();
         window.location.replace("./login.html");
       } catch {
         logoutBtn.disabled = false;
@@ -63,9 +62,9 @@ export function initNavigation(activePage = "") {
     });
   }
 
-  onAuthStateChanged(auth, async (user) => {
+  watchAuthState(async (user) => {
     if (!user) {
-      if (currentPath !== "index.html" && currentPath !== "login.html" && currentPath !== "signup.html") {
+      if (currentPath !== "" && currentPath !== "index.html" && currentPath !== "login.html" && currentPath !== "signup.html") {
         window.location.replace("./login.html");
       }
       return;

@@ -1,5 +1,4 @@
-import { auth } from "./firebase-config.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { watchAuthState } from "./firebase-config.js";
 import { apiConfigured, apiRequest } from "./api.js";
 import { initNavigation } from "./nav.js";
 
@@ -115,7 +114,7 @@ function renderHubCards(searchQuery = "") {
   `).join("");
 }
 
-onAuthStateChanged(auth, (user) => {
+watchAuthState((user) => {
   if (!user) {
     window.location.replace("./login.html");
     return;

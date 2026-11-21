@@ -1,5 +1,4 @@
-﻿import { auth } from "./firebase-config.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { auth, watchAuthState } from "./firebase-config.js";
 import { API_BASE_URL } from "./app-config.js";
 
 export const apiConfigured = Boolean(API_BASE_URL);
@@ -18,7 +17,7 @@ function waitForInitialAuthState() {
         resolve(user);
       };
 
-      unsubscribe = onAuthStateChanged(auth, finish, () => finish(null));
+      unsubscribe = watchAuthState(finish, () => finish(null));
       if (settled) unsubscribe();
     });
   }

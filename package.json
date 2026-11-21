@@ -8,6 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "dev": "node server/index.js",
+    "build": "node -e \"console.log('Static frontend and Express server ready')\"",
     "start": "node server/index.js",
     "migrate:coursemate-index": "node server/migrate-coursemate-index.js",
     "test": "node --test server/*.test.js"

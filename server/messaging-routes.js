@@ -77,7 +77,7 @@ function registerMessagingRoutes(app, {
 
   async function updateUserConversation(uid, id, update) {
     const ref = database.ref(`messaging/userConversations/${uid}/${id}`);
-    const result = await ref.transaction((current) => current ? update(current) : undefined);
+    const result = await ref.transaction((current) => (current ? update(current) : null));
     return result.snapshot.val();
   }
 
@@ -106,12 +106,18 @@ function registerMessagingRoutes(app, {
       lastMessageSenderUid: request.senderUid
     };
     const conversationRef = database.ref(`messaging/conversations/${id}`);
-    const existing = await conversationRef.get();
-    const saved = existing.exists()
-      ? await conversationRef.transaction((current) => current?.status === "active" ? current : conversation)
-      : await conversationRef.transaction((current) => current || conversation);
-    if (!saved.committed && saved.snapshot.val()?.acceptedRequestId !== requestId) {
-      throw Object.assign(new Error("A different conversation already exists for these students."), { statusCode: 409 });
+    const saved = await conversationRef.transaction((current) => {
+      if (current?.status === "active") {
+        return {
+          ...current,
+          participantProfiles: conversation.participantProfiles,
+          updatedAt: Math.max(timestamp, Number(current.updatedAt) || 0)
+        };
+      }
+      return conversation;
+    });
+    if (!saved.committed || saved.snapshot.val()?.status !== "active") {
+      throw Object.assign(new Error("Conversation could not be established. Please try again."), { statusCode: 409 });
     }
 
     const messageId = `request_${requestId}`;
@@ -123,32 +129,52 @@ function registerMessagingRoutes(app, {
       readBy: { [request.senderUid]: true, [request.recipientUid]: true }
     };
     const senderConversationEntry = {
-        conversationId: id,
-        otherUid: request.recipientUid,
-        otherName: recipient.publicProfile.name,
-        otherProfilePicture: recipient.publicProfile.profilePicture,
-        lastMessagePreview: request.initialMessage.slice(0, 160),
-        lastMessageAt: message.createdAt,
-        updatedAt: timestamp,
-        unreadCount: 0,
-        hidden: false
+      conversationId: id,
+      otherUid: request.recipientUid,
+      otherName: recipient.publicProfile.name,
+      otherProfilePicture: recipient.publicProfile.profilePicture,
+      lastMessagePreview: request.initialMessage.slice(0, 160),
+      lastMessageAt: message.createdAt,
+      updatedAt: timestamp,
+      unreadCount: 0,
+      hidden: false
     };
     const recipientConversationEntry = {
-        conversationId: id,
-        otherUid: request.senderUid,
-        otherName: sender.publicProfile.name,
-        otherProfilePicture: sender.publicProfile.profilePicture,
-        lastMessagePreview: request.initialMessage.slice(0, 160),
-        lastMessageAt: message.createdAt,
-        updatedAt: timestamp,
-        unreadCount: 0,
-        hidden: false
+      conversationId: id,
+      otherUid: request.senderUid,
+      otherName: sender.publicProfile.name,
+      otherProfilePicture: sender.publicProfile.profilePicture,
+      lastMessagePreview: request.initialMessage.slice(0, 160),
+      lastMessageAt: message.createdAt,
+      updatedAt: timestamp,
+      unreadCount: 0,
+      hidden: false
     };
     const messageRef = database.ref(`messaging/messages/${id}/${messageId}`);
     await messageRef.transaction((current) => current || message);
     await Promise.all([
-      database.ref(`messaging/userConversations/${request.senderUid}/${id}`).transaction((current) => current || senderConversationEntry),
-      database.ref(`messaging/userConversations/${request.recipientUid}/${id}`).transaction((current) => current || recipientConversationEntry),
+      database.ref(`messaging/userConversations/${request.senderUid}/${id}`).transaction((current) => (
+        current
+          ? {
+              ...current,
+              otherName: recipient.publicProfile.name,
+              otherProfilePicture: recipient.publicProfile.profilePicture,
+              hidden: false,
+              updatedAt: Math.max(timestamp, Number(current.updatedAt) || 0)
+            }
+          : senderConversationEntry
+      )),
+      database.ref(`messaging/userConversations/${request.recipientUid}/${id}`).transaction((current) => (
+        current
+          ? {
+              ...current,
+              otherName: sender.publicProfile.name,
+              otherProfilePicture: sender.publicProfile.profilePicture,
+              hidden: false,
+              updatedAt: Math.max(timestamp, Number(current.updatedAt) || 0)
+            }
+          : recipientConversationEntry
+      )),
       database.ref(`messaging/conversationAccess/${request.senderUid}/${id}`).set(true),
       database.ref(`messaging/conversationAccess/${request.recipientUid}/${id}`).set(true),
       database.ref(`messaging/notifications/${request.senderUid}/accepted-${requestId}`).transaction((current) => current || ({
@@ -156,6 +182,8 @@ function registerMessagingRoutes(app, {
         type: "message-request-accepted",
         title: "Message request accepted",
         message: `${recipient.publicProfile.name} accepted your message request.`,
+        conversationId: id,
+        requestId,
         createdAt: timestamp,
         read: false
       }))
@@ -218,7 +246,7 @@ function registerMessagingRoutes(app, {
       if (!validRecordId(id)) return res.status(400).json({ error: "Invalid notification ID." });
       const notificationRef = database.ref(`messaging/notifications/${req.user.uid}/${id}`);
       const result = await notificationRef.transaction((current) =>
-        current ? { ...current, read: true } : undefined
+        current ? { ...current, read: true } : null
       );
       if (!result.snapshot.exists()) return res.status(404).json({ error: "Notification not found." });
       res.json({ id, read: true });
@@ -256,11 +284,16 @@ function registerMessagingRoutes(app, {
 
   app.get("/api/messages/requests", requireAuth, async (req, res, next) => {
     try {
-      const snapshot = await database.ref(`messaging/userRequests/${req.user.uid}`).get();
-      const items = snapshotToList(snapshot.val())
+      const [incomingSnap, outgoingSnap] = await Promise.all([
+        database.ref(`messaging/userRequests/${req.user.uid}`).get(),
+        database.ref(`messaging/outgoingRequests/${req.user.uid}`).get()
+      ]);
+      const items = snapshotToList(incomingSnap.val())
         .filter((item) => item.status === "pending")
         .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
-      res.json({ items });
+      const outgoing = snapshotToList(outgoingSnap.val())
+        .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0));
+      res.json({ items, outgoing });
     } catch (error) {
       next(error);
     }
@@ -360,6 +393,17 @@ function registerMessagingRoutes(app, {
           status: "pending",
           createdAt: now
         },
+        [`messaging/outgoingRequests/${req.user.uid}/${requestId}`]: {
+          id: requestId,
+          senderUid: req.user.uid,
+          recipientUid,
+          recipientName: recipient.publicProfile.name,
+          recipientProfilePicture: recipient.publicProfile.profilePicture,
+          initialMessage,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now
+        },
         [`messaging/notifications/${recipientUid}/request-${requestId}`]: {
           id: `request-${requestId}`,
           type: "message-request",
@@ -392,10 +436,27 @@ function registerMessagingRoutes(app, {
       if (!snapshot.exists()) return res.status(404).json({ error: "Message request not found." });
       const current = snapshot.val();
       if (current.recipientUid !== req.user.uid) return res.status(403).json({ error: "Only the recipient can respond to this request." });
-      if (action === "accepted" && current.status === "accepted") {
-        const conversation = await createAcceptedConversation(current, requestId, Date.now());
-        await database.ref(`messaging/userRequests/${req.user.uid}/${requestId}`).remove();
-        return res.json({ id: requestId, status: "accepted", conversation });
+
+      if (current.status === "accepted") {
+        if (action === "accepted") {
+          const now = Date.now();
+          const conversation = await createAcceptedConversation(current, requestId, now);
+          await database.ref().update({
+            [`messaging/userRequests/${req.user.uid}/${requestId}`]: null,
+            [`messaging/outgoingRequests/${current.senderUid}/${requestId}/status`]: "accepted",
+            [`messaging/outgoingRequests/${current.senderUid}/${requestId}/conversationId`]: conversation.id,
+            [`messaging/outgoingRequests/${current.senderUid}/${requestId}/updatedAt`]: now,
+            [`messaging/outgoingRequests/${current.senderUid}/${requestId}/acceptedAt`]: current.acceptedAt || now
+          });
+          return res.json({ id: requestId, status: "accepted", conversation });
+        }
+        return res.status(409).json({ error: "This message request was already accepted." });
+      }
+      if (current.status === "declined") {
+        return res.status(409).json({ error: "This message request was already declined." });
+      }
+      if (current.status === "blocked") {
+        return res.status(409).json({ error: "This message request was already blocked." });
       }
       if (current.status !== "pending") {
         return res.status(409).json({ error: "This message request is no longer pending." });
@@ -411,29 +472,64 @@ function registerMessagingRoutes(app, {
         );
       }
       const updatedSnapshot = await requestRef.transaction((request) => {
-        if (!request || request.recipientUid !== req.user.uid || request.status !== "pending") return undefined;
-        return { ...request, status: action, updatedAt: now, respondedAt: now };
+        if (!request) return null;
+        if (request.recipientUid !== req.user.uid || request.status !== "pending") return undefined;
+        return {
+          ...request,
+          status: action,
+          updatedAt: now,
+          respondedAt: now,
+          ...(action === "accepted" ? { acceptedAt: now } : {})
+        };
       });
       const updated = updatedSnapshot.snapshot.val();
-      if (!updatedSnapshot.committed || updated?.status !== action) {
-        return res.status(409).json({ error: "This message request was already handled." });
+      if (!updated) {
+        return res.status(404).json({ error: "Message request not found." });
+      }
+      if (!updatedSnapshot.committed || updated.status !== action) {
+        if (action === "accepted" && updated.status === "accepted" && updated.recipientUid === req.user.uid) {
+          const conversation = await createAcceptedConversation(updated, requestId, now);
+          await database.ref().update({
+            [`messaging/userRequests/${req.user.uid}/${requestId}`]: null,
+            [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/status`]: "accepted",
+            [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/conversationId`]: conversation.id,
+            [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/updatedAt`]: now,
+            [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/acceptedAt`]: updated.acceptedAt || now
+          });
+          return res.json({ id: requestId, status: "accepted", conversation });
+        }
+        const statusLabel = ["accepted", "declined", "blocked"].includes(updated.status) ? updated.status : "handled";
+        return res.status(409).json({ error: `This message request was already ${statusLabel}.` });
+      }
+
+      if (action === "accepted") {
+        const conversation = await createAcceptedConversation(updated, requestId, now);
+        await database.ref().update({
+          [`messaging/requestPairs/${current.pairId}/status`]: "accepted",
+          [`messaging/requestPairs/${current.pairId}/updatedAt`]: now,
+          [`messaging/requests/${requestId}/conversationId`]: conversation.id,
+          [`messaging/userRequests/${req.user.uid}/${requestId}`]: null,
+          [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/status`]: "accepted",
+          [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/conversationId`]: conversation.id,
+          [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/updatedAt`]: now,
+          [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/acceptedAt`]: now
+        });
+        return res.json({ id: requestId, status: "accepted", conversation });
       }
 
       const updates = {
-        [`messaging/requestPairs/${current.pairId}/status`]: action === "declined" ? "declined" : action === "blocked" ? "blocked" : "accepted",
-        [`messaging/requestPairs/${current.pairId}/updatedAt`]: now
+        [`messaging/requestPairs/${current.pairId}/status`]: action === "declined" ? "declined" : "blocked",
+        [`messaging/requestPairs/${current.pairId}/updatedAt`]: now,
+        [`messaging/userRequests/${req.user.uid}/${requestId}`]: null,
+        [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/status`]: action,
+        [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/updatedAt`]: now,
+        [`messaging/outgoingRequests/${updated.senderUid}/${requestId}/respondedAt`]: now
       };
-      if (action !== "accepted") updates[`messaging/userRequests/${req.user.uid}/${requestId}`] = null;
       if (action === "blocked") {
         updates[`messaging/blocks/${req.user.uid}/${current.senderUid}`] = { blockedUid: current.senderUid, createdAt: now };
       }
       await database.ref().update(updates);
 
-      if (action === "accepted") {
-        const conversation = await createAcceptedConversation(updated, requestId, now);
-        await database.ref(`messaging/userRequests/${req.user.uid}/${requestId}`).remove();
-        return res.json({ id: requestId, status: action, conversation });
-      }
       if (action === "blocked") {
         await hidePairConversations(current.senderUid, current.recipientUid);
       }
@@ -443,6 +539,7 @@ function registerMessagingRoutes(app, {
           type: "message-request-declined",
           title: "Message request declined",
           message: "Your message request was declined.",
+          requestId,
           createdAt: now,
           read: false
         });
@@ -502,11 +599,14 @@ function registerMessagingRoutes(app, {
       const pairSnapshot = await pairRef.get();
       const requestId = pairSnapshot.val()?.requestId;
       if (requestId) {
+        const reqSnap = await database.ref(`messaging/requests/${requestId}`).get();
+        const senderUid = reqSnap.val()?.senderUid;
         await database.ref().update({
           [`messaging/requests/${requestId}/status`]: "blocked",
           [`messaging/requests/${requestId}/updatedAt`]: now,
           [`messaging/userRequests/${req.user.uid}/${requestId}`]: null,
-          [`messaging/userRequests/${otherUid}/${requestId}`]: null
+          [`messaging/userRequests/${otherUid}/${requestId}`]: null,
+          ...(senderUid ? { [`messaging/outgoingRequests/${senderUid}/${requestId}/status`]: "blocked", [`messaging/outgoingRequests/${senderUid}/${requestId}/updatedAt`]: now } : {})
         });
       }
       await hidePairConversations(req.user.uid, otherUid);
@@ -603,7 +703,8 @@ function registerMessagingRoutes(app, {
       }
       const preview = text.slice(0, 160);
       await database.ref(`messaging/conversations/${conversationId}`).transaction((current) => {
-        if (!current || current.status !== "active" || current.acceptedRequestId !== conversation.acceptedRequestId) return undefined;
+        if (!current) return null;
+        if (current.status !== "active" || current.acceptedRequestId !== conversation.acceptedRequestId) return undefined;
         if (Number(current.lastMessageAt) > Number(saved.createdAt)) return current;
         return {
           ...current,
@@ -662,7 +763,7 @@ function registerMessagingRoutes(app, {
       const authorized = await authorizedConversation(req.params.conversationId, req.user.uid);
       if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
       const userConversationRef = database.ref(`messaging/userConversations/${req.user.uid}/${req.params.conversationId}`);
-      await userConversationRef.transaction((current) => current ? { ...current, unreadCount: 0 } : undefined);
+      await userConversationRef.transaction((current) => (current ? { ...current, unreadCount: 0 } : null));
       res.json({ ok: true });
     } catch (error) {
       next(error);

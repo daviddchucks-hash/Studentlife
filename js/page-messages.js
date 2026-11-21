@@ -1,6 +1,13 @@
-import { auth, database } from "./firebase-config.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { limitToLast, off, onValue, orderByChild, query, ref } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+import {
+  dbLimitToLast,
+  dbOff,
+  dbOnValue,
+  dbOrderByChild,
+  dbQuery,
+  dbRef,
+  firebaseEnabled,
+  watchAuthState
+} from "./firebase-config.js";
 import { apiRequest } from "./api.js";
 import { initNavigation } from "./nav.js";
 
@@ -11,6 +18,7 @@ const searchState = document.querySelector("#search-state");
 const conversationList = document.querySelector("#conversation-list");
 const conversationCount = document.querySelector("#conversation-count");
 const requestList = document.querySelector("#request-list");
+const outgoingRequestList = document.querySelector("#outgoing-request-list");
 const requestCount = document.querySelector("#request-count");
 const notificationList = document.querySelector("#notification-list");
 const notificationCount = document.querySelector("#notification-count");
@@ -30,12 +38,18 @@ let activeConversationListener = null;
 let activeConversationRef = null;
 let activeRequestListener = null;
 let activeRequestRef = null;
+let activeOutgoingRequestListener = null;
+let activeOutgoingRequestRef = null;
 let activeNotificationListener = null;
 let activeNotificationRef = null;
 let activeMessageListener = null;
 let activeMessageRef = null;
+let localSyncTimer = null;
 let pendingMessage = null;
 let lastReadMessageId = "";
+let hasLoadedInitialNotifications = false;
+const knownNotificationIds = new Set();
+const knownOutgoingStatuses = new Map();
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (char) => ({
@@ -108,7 +122,7 @@ function showChatStatus(message, success = false) {
 }
 
 function clearListener(refValue, listener) {
-  if (refValue && listener) off(refValue, "value", listener);
+  if (refValue && listener) dbOff(refValue, "value", listener);
 }
 
 function clearMessageListener() {
@@ -121,13 +135,23 @@ function clearPageListeners() {
   clearMessageListener();
   clearListener(activeConversationRef, activeConversationListener);
   clearListener(activeRequestRef, activeRequestListener);
+  clearListener(activeOutgoingRequestRef, activeOutgoingRequestListener);
   clearListener(activeNotificationRef, activeNotificationListener);
+  if (localSyncTimer) {
+    clearInterval(localSyncTimer);
+    localSyncTimer = null;
+  }
   activeConversationRef = null;
   activeConversationListener = null;
   activeRequestRef = null;
   activeRequestListener = null;
+  activeOutgoingRequestRef = null;
+  activeOutgoingRequestListener = null;
   activeNotificationRef = null;
   activeNotificationListener = null;
+  hasLoadedInitialNotifications = false;
+  knownNotificationIds.clear();
+  knownOutgoingStatuses.clear();
 }
 
 function showPanel(panelId) {
@@ -174,7 +198,7 @@ function renderRequests(items = []) {
   const pending = items.filter((item) => item?.status === "pending");
   requestCount.textContent = String(pending.length);
   requestList.innerHTML = pending.length ? pending.map((item) => `
-    <article class="request-card">
+    <article class="request-card" data-request-card="${escapeHtml(item.id)}">
       <div class="conversation-item-head">
         ${avatar(item.senderName, item.senderProfilePicture)}
         <strong>${escapeHtml(item.senderName || "Student")}</strong>
@@ -188,6 +212,49 @@ function renderRequests(items = []) {
       </div>
     </article>
   `).join("") : '<p class="empty-list">No pending message requests.</p>';
+}
+
+function renderOutgoingRequests(items = []) {
+  if (!outgoingRequestList) return;
+  const visible = items
+    .filter((item) => item && ["pending", "accepted", "declined"].includes(item.status))
+    .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+
+  for (const item of visible) {
+    const previousStatus = knownOutgoingStatuses.get(item.id);
+    if (previousStatus === "pending" && item.status === "accepted") {
+      showSearchMessage("Your message request was accepted.", true);
+      loadConversationList().catch(() => {});
+    } else if (previousStatus === "pending" && item.status === "declined") {
+      showSearchMessage("Your message request was declined.");
+    }
+    knownOutgoingStatuses.set(item.id, item.status);
+  }
+
+  const pendingOutgoing = visible.filter((item) => item.status === "pending");
+  const recentHandled = visible.filter((item) => item.status !== "pending").slice(0, 5);
+  const displayList = [...pendingOutgoing, ...recentHandled];
+
+  outgoingRequestList.innerHTML = displayList.length ? `
+    <div class="request-card"><strong>Sent requests</strong></div>
+    ${displayList.map((item) => {
+      const label = item.status === "accepted"
+        ? "Accepted"
+        : item.status === "declined"
+          ? "Declined"
+          : "Pending";
+      return `
+        <article class="request-card">
+          <div class="conversation-item-head">
+            ${avatar(item.recipientName, item.recipientProfilePicture)}
+            <strong>${escapeHtml(item.recipientName || "Student")}</strong>
+            <time class="conversation-item-time">${escapeHtml(label)}</time>
+          </div>
+          <p>${escapeHtml(item.initialMessage || "")}</p>
+        </article>
+      `;
+    }).join("")}
+  ` : "";
 }
 
 function renderBlocked(items = []) {
@@ -260,6 +327,7 @@ async function loadConversationList() {
 async function loadRequests() {
   const result = await apiRequest("/api/messages/requests");
   renderRequests(result.items || []);
+  renderOutgoingRequests(result.outgoing || []);
 }
 
 async function loadBlocked() {
@@ -269,7 +337,17 @@ async function loadBlocked() {
 
 async function loadNotifications() {
   const result = await apiRequest("/api/messages/notifications");
-  renderNotifications(result.items || []);
+  const items = result.items || [];
+  for (const item of items) {
+    if (item?.id && !knownNotificationIds.has(item.id)) {
+      if (hasLoadedInitialNotifications && item.type === "message-request-accepted" && item.read !== true) {
+        showSearchMessage("Your message request was accepted.", true);
+      }
+      knownNotificationIds.add(item.id);
+    }
+  }
+  hasLoadedInitialNotifications = true;
+  renderNotifications(items);
 }
 
 async function markConversationRead(conversationId) {
@@ -278,13 +356,14 @@ async function markConversationRead(conversationId) {
 
 function attachMessageStream(conversationId) {
   clearMessageListener();
-  const messagesRef = query(
-    ref(database, `messaging/messages/${conversationId}`),
-    orderByChild("createdAt"),
-    limitToLast(200)
+  if (!firebaseEnabled) return;
+  const messagesRef = dbQuery(
+    dbRef(`messaging/messages/${conversationId}`),
+    dbOrderByChild("createdAt"),
+    dbLimitToLast(200)
   );
   activeMessageRef = messagesRef;
-  activeMessageListener = onValue(messagesRef, (snapshot) => {
+  activeMessageListener = dbOnValue(messagesRef, (snapshot) => {
     const messages = Object.values(snapshot.val() || {})
       .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
     renderMessages(messages);
@@ -328,8 +407,17 @@ async function respondToRequest(requestId, status) {
     method: "PUT",
     body: { status }
   });
-  if (status === "accepted" && result.conversation) {
-    selectConversation(result.conversation.id, result.conversation.otherUid, result.conversation.otherName);
+  if (status === "accepted") {
+    showSearchMessage("Request accepted. You can now start chatting.", true);
+    showPanel("conversations-panel");
+    if (result.conversation) {
+      await selectConversation(result.conversation.id, result.conversation.otherUid, result.conversation.otherName);
+    }
+  } else if (status === "declined") {
+    showSearchMessage("Message request declined.");
+  } else if (status === "blocked") {
+    showSearchMessage("Student blocked.");
+    await loadBlocked();
   }
   await Promise.all([loadRequests(), loadConversationList()]);
 }
@@ -337,11 +425,29 @@ async function respondToRequest(requestId, status) {
 requestList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-request-action]");
   if (!button) return;
-  button.disabled = true;
+  const card = button.closest("[data-request-card]");
+  if (button.disabled || card?.dataset.submitting === "true") return;
+
+  const action = button.dataset.requestAction;
+  const requestId = button.dataset.requestId;
+  const cardButtons = card ? [...card.querySelectorAll("button")] : [button];
+  const originalText = button.textContent;
+  const loadingLabels = {
+    accepted: "Accepting…",
+    declined: "Declining…",
+    blocked: "Blocking…"
+  };
+
+  if (card) card.dataset.submitting = "true";
+  cardButtons.forEach((btn) => { btn.disabled = true; });
+  button.textContent = loadingLabels[action] || "Working…";
+
   try {
-    await respondToRequest(button.dataset.requestId, button.dataset.requestAction);
+    await respondToRequest(requestId, action);
   } catch (error) {
-    button.disabled = false;
+    if (card) delete card.dataset.submitting;
+    cardButtons.forEach((btn) => { btn.disabled = false; });
+    button.textContent = originalText;
     showSearchMessage(error.message || "Could not update the message request.");
   }
 });
@@ -441,6 +547,7 @@ searchForm.addEventListener("submit", async (event) => {
           ? "Message request sent. A conversation will open after the student accepts."
           : "Your request is already in progress.", true);
         sendRequestButton.textContent = "Request sent";
+        await loadRequests();
       } catch (error) {
         sendRequestButton.disabled = false;
         showSearchMessage(error.message || "Could not send this message request.");
@@ -471,6 +578,10 @@ chatForm.addEventListener("submit", async (event) => {
     pendingMessage = null;
     messageInput.value = "";
     showChatStatus("");
+    if (!firebaseEnabled) {
+      const updated = await apiRequest(`/api/messages/conversations/${encodeURIComponent(selectedConversationId)}/messages`);
+      renderMessages(updated.messages || []);
+    }
     await loadConversationList();
     messageInput.focus();
   } catch (error) {
@@ -488,9 +599,26 @@ messageInput.addEventListener("keydown", (event) => {
 });
 
 function subscribeToRealtimeLists() {
-  const conversationRef = ref(database, `messaging/userConversations/${activeUserUid}`);
+  if (!firebaseEnabled) {
+    if (localSyncTimer) clearInterval(localSyncTimer);
+    localSyncTimer = setInterval(async () => {
+      if (!activeUserUid || document.hidden) return;
+      try {
+        await Promise.all([loadConversationList(), loadRequests(), loadNotifications()]);
+        if (selectedConversationId) {
+          const updated = await apiRequest(`/api/messages/conversations/${encodeURIComponent(selectedConversationId)}/messages`);
+          renderMessages(updated.messages || []);
+        }
+      } catch {
+        // Ignore transient background sync errors
+      }
+    }, 3000);
+    return;
+  }
+
+  const conversationRef = dbRef(`messaging/userConversations/${activeUserUid}`);
   activeConversationRef = conversationRef;
-  activeConversationListener = onValue(conversationRef, (snapshot) => {
+  activeConversationListener = dbOnValue(conversationRef, (snapshot) => {
     const items = Object.values(snapshot.val() || {}).filter((item) => item?.hidden !== true).map((item) => ({
       ...item,
       id: item.conversationId || item.id,
@@ -511,21 +639,42 @@ function subscribeToRealtimeLists() {
     }
   }, (error) => showSearchMessage(error.message || "Could not sync your conversations."));
 
-  const requestRef = ref(database, `messaging/userRequests/${activeUserUid}`);
+  const requestRef = dbRef(`messaging/userRequests/${activeUserUid}`);
   activeRequestRef = requestRef;
-  activeRequestListener = onValue(requestRef, (snapshot) => {
+  activeRequestListener = dbOnValue(requestRef, (snapshot) => {
     renderRequests(Object.values(snapshot.val() || {}));
   }, (error) => showSearchMessage(error.message || "Could not sync message requests."));
 
-  const notificationRef = ref(database, `messaging/notifications/${activeUserUid}`);
+  const outgoingRequestRef = dbRef(`messaging/outgoingRequests/${activeUserUid}`);
+  activeOutgoingRequestRef = outgoingRequestRef;
+  activeOutgoingRequestListener = dbOnValue(outgoingRequestRef, (snapshot) => {
+    renderOutgoingRequests(Object.values(snapshot.val() || {}));
+  }, (error) => showSearchMessage(error.message || "Could not sync sent requests."));
+
+  const notificationRef = dbRef(`messaging/notifications/${activeUserUid}`);
   activeNotificationRef = notificationRef;
-  activeNotificationListener = onValue(notificationRef, (snapshot) => {
+  activeNotificationListener = dbOnValue(notificationRef, (snapshot) => {
     const items = Object.values(snapshot.val() || {}).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    let newlyAccepted = false;
+    for (const item of items) {
+      if (item?.id && !knownNotificationIds.has(item.id)) {
+        if (hasLoadedInitialNotifications && item.type === "message-request-accepted" && item.read !== true) {
+          newlyAccepted = true;
+        }
+        knownNotificationIds.add(item.id);
+      }
+    }
+    hasLoadedInitialNotifications = true;
     renderNotifications(items);
+    if (newlyAccepted) {
+      showSearchMessage("Your message request was accepted.", true);
+      loadConversationList().catch(() => {});
+      loadRequests().catch(() => {});
+    }
   }, (error) => showSearchMessage(error.message || "Could not sync alerts."));
 }
 
-onAuthStateChanged(auth, async (user) => {
+watchAuthState(async (user) => {
   clearPageListeners();
   if (!user) {
     window.location.replace("./login.html");

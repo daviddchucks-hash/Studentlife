@@ -43,6 +43,12 @@
           ".write": false
         }
       },
+      "outgoingRequests": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      },
       "conversationAccess": {
         "$uid": {
           ".read": false,

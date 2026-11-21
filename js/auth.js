@@ -1,13 +1,11 @@
-﻿import { auth } from "./firebase-config.js";
-import { API_BASE_URL } from "./app-config.js";
 import {
-  browserLocalPersistence,
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  setPersistence,
-  signInWithEmailAndPassword,
-  updateProfile
-} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+  auth,
+  setAuthPersistence,
+  signInWithEmail,
+  signUpWithEmail,
+  watchAuthState
+} from "./firebase-config.js";
+import { API_BASE_URL } from "./app-config.js";
 
 const form = document.querySelector("#auth-form");
 const message = document.querySelector("#form-message");
@@ -29,7 +27,7 @@ const friendlyErrors = {
   "auth/too-many-requests": "Too many attempts. Wait a little and try again."
 };
 
-onAuthStateChanged(auth, (user) => {
+watchAuthState((user) => {
   if (user && !isSubmitting) window.location.replace("./dashboard.html");
 });
 
@@ -60,11 +58,10 @@ form.addEventListener("submit", async (event) => {
   submitButton.textContent = isSignup ? "Creating account…" : "Signing in…";
 
   try {
-    await setPersistence(auth, browserLocalPersistence);
+    await setAuthPersistence();
 
     if (isSignup) {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      if (name) await updateProfile(credential.user, { displayName: name });
+      const credential = await signUpWithEmail({ name, email, password });
 
       const idToken = await credential.user.getIdToken();
       const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/api/profile/matric`, {
@@ -83,11 +80,11 @@ form.addEventListener("submit", async (event) => {
 
       window.location.replace("./dashboard.html");
     } else {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmail({ email, password });
       window.location.replace("./dashboard.html");
     }
   } catch (error) {
-    showMessage(friendlyErrors[error.code] || "We could not complete that request. Check your details and try again.");
+    showMessage(friendlyErrors[error.code] || error.message || "We could not complete that request. Check your details and try again.");
     isSubmitting = false;
     submitButton.disabled = false;
     submitButton.textContent = isSignup ? "Create account" : "Sign in";
