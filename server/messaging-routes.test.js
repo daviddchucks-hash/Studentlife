@@ -357,3 +357,117 @@ test("declined requests cannot be continued or resent during the cooldown", asyn
   })).status, 429);
   assert.equal((await call("studentC", "PUT", "/api/messages/requests/request_decline", { status: "accepted" })).status, 403);
 });
+
+test("Messaging V6 features: replies, pagination, delivery/read states, delete-for-me/everyone, typing, and presence", async (t) => {
+  const harness = createHarness();
+  const server = harness.app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  async function call(uid, method, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${uid}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    return { status: response.status, body: await response.json() };
+  }
+
+  // Establish active conversation between studentA and studentB
+  assert.equal((await call("studentA", "POST", "/api/messages/requests", {
+    recipientUid: "studentB", text: "Initial study question", requestId: "v6_req_1"
+  })).status, 201);
+  const acceptRes = await call("studentB", "PUT", "/api/messages/requests/v6_req_1", { status: "accepted" });
+  assert.equal(acceptRes.status, 200);
+  const convId = acceptRes.body.conversation.id;
+
+  // Send two messages and verify server-stored deliveryStatus === "sent"
+  const m1 = await call("studentA", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Meet at the library?", messageId: "v6_msg_1"
+  });
+  assert.equal(m1.status, 201);
+  assert.equal(m1.body.message.deliveryStatus, "sent");
+
+  // Wait 2ms so timestamps are strictly ordered for pagination tests
+  await new Promise((r) => setTimeout(r, 3));
+  const m2 = await call("studentB", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Yes, 4pm works great!", messageId: "v6_msg_2", replyToMessageId: "v6_msg_1"
+  });
+  assert.equal(m2.status, 201);
+  assert.equal(m2.body.message.replyToMessageId, "v6_msg_1");
+  assert.equal(m2.body.message.replyToSenderUid, "studentA");
+  assert.equal(m2.body.message.replyToSenderName, "Student A");
+  assert.equal(m2.body.message.replyToText, "Meet at the library?");
+
+  // Reject invalid reply target
+  const badReply = await call("studentA", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Bad quote", messageId: "v6_msg_bad_reply", replyToMessageId: "nonexistent_id"
+  });
+  assert.equal(badReply.status, 400);
+
+  // Delivery and read status lifecycle on studentA's message v6_msg_1
+  const deliveredRes = await call("studentB", "POST", `/api/messages/conversations/${convId}/delivered`);
+  assert.equal(deliveredRes.status, 200);
+  const afterDelivered = (await call("studentA", "GET", `/api/messages/conversations/${convId}/messages`)).body.messages;
+  const v6Msg1Delivered = afterDelivered.find((m) => m.id === "v6_msg_1");
+  assert.equal(v6Msg1Delivered.deliveryStatus, "delivered");
+  assert.ok(v6Msg1Delivered.deliveredAt > 0);
+
+  const readRes = await call("studentB", "POST", `/api/messages/conversations/${convId}/read`);
+  assert.equal(readRes.status, 200);
+  const afterRead = (await call("studentA", "GET", `/api/messages/conversations/${convId}/messages`)).body.messages;
+  const v6Msg1Read = afterRead.find((m) => m.id === "v6_msg_1");
+  assert.equal(v6Msg1Read.deliveryStatus, "read");
+  assert.equal(v6Msg1Read.readBy.studentB, true);
+  assert.ok(v6Msg1Read.readAt > 0);
+
+  // Typing & Presence endpoints + payload validation
+  assert.equal((await call("studentA", "PUT", `/api/messages/conversations/${convId}/typing`, { isTyping: true, extra: 1 })).status, 400);
+  assert.equal((await call("studentA", "PUT", `/api/messages/conversations/${convId}/typing`, { isTyping: true })).status, 200);
+  assert.equal((await call("studentA", "PUT", "/api/messages/presence", { online: true, spoof: 1 })).status, 400);
+  assert.equal((await call("studentA", "PUT", "/api/messages/presence", { online: true })).status, 200);
+
+  const bView = await call("studentB", "GET", `/api/messages/conversations/${convId}/messages?limit=2`);
+  assert.equal(bView.status, 200);
+  assert.equal(bView.body.otherTyping, true);
+  assert.equal(bView.body.otherPresence.online, true);
+  assert.equal(bView.body.hasMore, true);
+  assert.equal(bView.body.messages.length, 2);
+
+  // Pagination: load older messages before oldest loaded timestamp
+  const oldestLoadedTs = bView.body.messages[0].createdAt;
+  const olderView = await call("studentB", "GET", `/api/messages/conversations/${convId}/messages?limit=2&before=${oldestLoadedTs}`);
+  assert.equal(olderView.status, 200);
+  assert.equal(olderView.body.hasMore, false);
+  assert.equal(olderView.body.messages.length, 1);
+  assert.equal(olderView.body.messages[0].id, "request_v6_req_1");
+
+  // Delete for me hides only for caller
+  const delMe = await call("studentA", "DELETE", `/api/messages/conversations/${convId}/messages/v6_msg_2?scope=me`);
+  assert.equal(delMe.status, 200);
+  const aMessagesAfterDelMe = (await call("studentA", "GET", `/api/messages/conversations/${convId}/messages`)).body.messages;
+  const bMessagesAfterDelMe = (await call("studentB", "GET", `/api/messages/conversations/${convId}/messages`)).body.messages;
+  assert.equal(aMessagesAfterDelMe.some((m) => m.id === "v6_msg_2"), false);
+  assert.equal(bMessagesAfterDelMe.some((m) => m.id === "v6_msg_2"), true);
+
+  // Unauthorized delete-for-everyone rejected (studentB cannot delete studentA's message for everyone)
+  const unauthDelAll = await call("studentB", "DELETE", `/api/messages/conversations/${convId}/messages/v6_msg_1?scope=everyone`);
+  assert.equal(unauthDelAll.status, 403);
+
+  // Authorized sender delete-for-everyone wipes message text for both and blocks future replies to it
+  const authDelAll = await call("studentA", "DELETE", `/api/messages/conversations/${convId}/messages/v6_msg_1?scope=everyone`);
+  assert.equal(authDelAll.status, 200);
+  const bAfterDelAll = (await call("studentB", "GET", `/api/messages/conversations/${convId}/messages`)).body.messages;
+  const wiped = bAfterDelAll.find((m) => m.id === "v6_msg_1");
+  assert.equal(wiped.deletedForEveryone, true);
+  assert.equal(wiped.text, "");
+
+  const replyDeleted = await call("studentB", "POST", `/api/messages/conversations/${convId}/messages`, {
+    text: "Replying to wiped", messageId: "v6_msg_reply_wiped", replyToMessageId: "v6_msg_1"
+  });
+  assert.equal(replyDeleted.status, 400);
+});
+

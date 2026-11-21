@@ -123,9 +123,14 @@ function registerMessagingRoutes(app, {
     const messageId = `request_${requestId}`;
     const message = {
       id: messageId,
+      messageId,
+      conversationId: id,
       senderUid: request.senderUid,
       text: request.initialMessage,
       createdAt: request.createdAt || timestamp,
+      deliveryStatus: "read",
+      deliveredAt: timestamp,
+      readAt: timestamp,
       readBy: { [request.senderUid]: true, [request.recipientUid]: true }
     };
     const senderConversationEntry = {
@@ -263,13 +268,19 @@ function registerMessagingRoutes(app, {
         const id = item.conversationId || item.id;
         const authorized = await authorizedConversation(id, req.user.uid);
         if (authorized.error) return null;
-        const other = await getEligibleProfile(authorized.otherUid);
+        const [other, presenceSnap] = await Promise.all([
+          getEligibleProfile(authorized.otherUid),
+          database.ref(`messaging/presence/${authorized.otherUid}`).get()
+        ]);
         if (!other) return null;
+        const presence = presenceSnap.val() || {};
         return {
           id,
           otherUid: authorized.otherUid,
           otherName: other.publicProfile.name,
           otherProfilePicture: other.publicProfile.profilePicture,
+          otherOnline: Boolean(presence.online && Date.now() - Number(presence.lastSeenAt || 0) < 120_000),
+          otherLastSeenAt: Number(presence.lastSeenAt) || 0,
           lastMessage: String(item.lastMessagePreview || "").slice(0, 160),
           lastMessageAt: Number(item.lastMessageAt) || 0,
           unreadCount: Number(item.unreadCount) || 0,
@@ -653,13 +664,42 @@ function registerMessagingRoutes(app, {
 
   app.get("/api/messages/conversations/:conversationId/messages", requireAuth, async (req, res, next) => {
     try {
-      const authorized = await authorizedConversation(req.params.conversationId, req.user.uid);
+      const conversationId = req.params.conversationId;
+      const authorized = await authorizedConversation(conversationId, req.user.uid);
       if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
-      const snapshot = await database.ref(`messaging/messages/${req.params.conversationId}`)
-        .orderByChild("createdAt").limitToLast(200).get();
-      const messages = snapshotToList(snapshot.val())
+
+      const requestedLimit = Number(req.query.limit);
+      const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 100)
+        : 50;
+      const beforeParam = Number(req.query.before);
+      const hasBefore = Number.isFinite(beforeParam) && beforeParam > 0;
+
+      const [snapshot, typingSnap, presenceSnap] = await Promise.all([
+        database.ref(`messaging/messages/${conversationId}`).orderByChild("createdAt").get(),
+        database.ref(`messaging/typing/${conversationId}/${authorized.otherUid}`).get(),
+        database.ref(`messaging/presence/${authorized.otherUid}`).get()
+      ]);
+
+      const visibleAll = snapshotToList(snapshot.val())
+        .filter((item) => item?.deletedFor?.[req.user.uid] !== true)
         .sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
-      res.json({ messages });
+
+      const filtered = hasBefore
+        ? visibleAll.filter((item) => (Number(item.createdAt) || 0) < beforeParam)
+        : visibleAll;
+
+      const hasMore = filtered.length > limit;
+      const messages = hasMore ? filtered.slice(-limit) : filtered;
+      const typingVal = typingSnap.val() || {};
+      const presenceVal = presenceSnap.val() || {};
+      const otherTyping = Boolean(typingVal.isTyping && Date.now() - Number(typingVal.updatedAt || 0) < 8000);
+      const otherPresence = {
+        online: Boolean(presenceVal.online && Date.now() - Number(presenceVal.lastSeenAt || 0) < 120_000),
+        lastSeenAt: Number(presenceVal.lastSeenAt) || 0
+      };
+
+      res.json({ messages, hasMore, otherTyping, otherPresence });
     } catch (error) {
       next(error);
     }
@@ -670,12 +710,19 @@ function registerMessagingRoutes(app, {
       if (!allowMessageAction(`send:${req.user.uid}`, 40)) {
         return res.status(429).json({ error: "You are sending messages too quickly. Please wait and try again." });
       }
-      if (!payloadHasOnly(req.body, ["text", "messageId"])) {
-        return res.status(400).json({ error: "Only text messages are supported; attachments are not accepted." });
+      if (!payloadHasOnly(req.body, ["text", "messageId", "replyToMessageId"])) {
+        return res.status(400).json({ error: "Only text messages and message replies are supported; attachments are not accepted." });
       }
       const messageId = String(req.body.messageId || "").trim();
       if (!validRecordId(messageId) || messageId.length > 120) return res.status(400).json({ error: "A valid message ID is required." });
       const text = validateTextMessage(req.body.text, 2000);
+      const replyToMessageId = req.body.replyToMessageId === undefined || req.body.replyToMessageId === null || req.body.replyToMessageId === ""
+        ? null
+        : String(req.body.replyToMessageId).trim();
+      if (replyToMessageId && (!validRecordId(replyToMessageId) || replyToMessageId.length > 120)) {
+        return res.status(400).json({ error: "Invalid reply target message ID." });
+      }
+
       const conversationId = req.params.conversationId;
       const authorized = await authorizedConversation(conversationId, req.user.uid);
       if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
@@ -686,13 +733,46 @@ function registerMessagingRoutes(app, {
       ]);
       if (!sender || !recipient) return res.status(403).json({ error: "A student account is no longer eligible for messaging." });
 
+      let replyMetadata = {};
+      if (replyToMessageId) {
+        const targetSnap = await database.ref(`messaging/messages/${conversationId}/${replyToMessageId}`).get();
+        const target = targetSnap.val();
+        if (!targetSnap.exists() || !target || target.deletedForEveryone === true || target.deletedFor?.[req.user.uid] === true) {
+          return res.status(400).json({ error: "The message you are replying to could not be found." });
+        }
+        const replyToSenderUid = String(target.senderUid || "");
+        const replyToSenderName = replyToSenderUid === req.user.uid
+          ? sender.publicProfile.name
+          : (replyToSenderUid === otherUid ? recipient.publicProfile.name : "Student");
+        replyMetadata = {
+          replyToMessageId,
+          replyToSenderUid,
+          replyToSenderName,
+          replyToText: String(target.text || "").slice(0, 200)
+        };
+      }
+
       const now = Date.now();
-      const message = { id: messageId, senderUid: req.user.uid, text, createdAt: now, readBy: { [req.user.uid]: true } };
+      const message = {
+        id: messageId,
+        messageId,
+        conversationId,
+        senderUid: req.user.uid,
+        text,
+        createdAt: now,
+        deliveryStatus: "sent",
+        readBy: { [req.user.uid]: true },
+        ...replyMetadata
+      };
       const messageRef = database.ref(`messaging/messages/${conversationId}/${messageId}`);
       const existingMessage = await messageRef.get();
       if (existingMessage.exists()) {
         const prior = existingMessage.val();
-        if (prior.senderUid !== req.user.uid || prior.text !== text) {
+        if (
+          prior.senderUid !== req.user.uid ||
+          prior.text !== text ||
+          (prior.replyToMessageId || null) !== (replyToMessageId || null)
+        ) {
           return res.status(409).json({ error: "This message ID has already been used." });
         }
       }
@@ -741,7 +821,8 @@ function registerMessagingRoutes(app, {
                 .slice(-200)
             )
           };
-        })
+        }),
+        database.ref(`messaging/typing/${conversationId}/${req.user.uid}`).set({ isTyping: false, updatedAt: now })
       ]);
       await database.ref(`messaging/notifications/${otherUid}/message-${messageId}`).transaction((current) => current || ({
         id: `message-${messageId}`,
@@ -758,13 +839,158 @@ function registerMessagingRoutes(app, {
     }
   });
 
+  app.post("/api/messages/conversations/:conversationId/delivered", requireAuth, async (req, res, next) => {
+    try {
+      const conversationId = req.params.conversationId;
+      const authorized = await authorizedConversation(conversationId, req.user.uid);
+      if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
+
+      const messagesSnap = await database.ref(`messaging/messages/${conversationId}`).get();
+      const raw = messagesSnap.val() || {};
+      const now = Date.now();
+      const updates = {};
+      for (const [msgId, msg] of Object.entries(raw)) {
+        if (!msg || typeof msg !== "object") continue;
+        if (
+          msg.senderUid === authorized.otherUid &&
+          msg.deletedForEveryone !== true &&
+          msg.deliveryStatus !== "read" &&
+          msg.deliveryStatus !== "delivered" &&
+          msg.readBy?.[req.user.uid] !== true
+        ) {
+          updates[`messaging/messages/${conversationId}/${msgId}/deliveryStatus`] = "delivered";
+          updates[`messaging/messages/${conversationId}/${msgId}/deliveredAt`] = now;
+        }
+      }
+      if (Object.keys(updates).length) {
+        await database.ref().update(updates);
+      }
+      res.json({ ok: true, updated: Object.keys(updates).length / 2 });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/messages/conversations/:conversationId/read", requireAuth, async (req, res, next) => {
     try {
-      const authorized = await authorizedConversation(req.params.conversationId, req.user.uid);
+      const conversationId = req.params.conversationId;
+      const authorized = await authorizedConversation(conversationId, req.user.uid);
       if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
-      const userConversationRef = database.ref(`messaging/userConversations/${req.user.uid}/${req.params.conversationId}`);
+      const now = Date.now();
+
+      const userConversationRef = database.ref(`messaging/userConversations/${req.user.uid}/${conversationId}`);
       await userConversationRef.transaction((current) => (current ? { ...current, unreadCount: 0 } : null));
+
+      const messagesSnap = await database.ref(`messaging/messages/${conversationId}`).get();
+      const raw = messagesSnap.val() || {};
+      const updates = {};
+      for (const [msgId, msg] of Object.entries(raw)) {
+        if (!msg || typeof msg !== "object") continue;
+        if (
+          msg.senderUid === authorized.otherUid &&
+          (msg.readBy?.[req.user.uid] !== true || msg.deliveryStatus !== "read")
+        ) {
+          updates[`messaging/messages/${conversationId}/${msgId}/readBy/${req.user.uid}`] = true;
+          updates[`messaging/messages/${conversationId}/${msgId}/deliveryStatus`] = "read";
+          updates[`messaging/messages/${conversationId}/${msgId}/deliveredAt`] = Number(msg.deliveredAt) || now;
+          updates[`messaging/messages/${conversationId}/${msgId}/readAt`] = Number(msg.readAt) || now;
+        }
+      }
+      if (Object.keys(updates).length) {
+        await database.ref().update(updates);
+      }
+
       res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/messages/conversations/:conversationId/messages/:messageId", requireAuth, async (req, res, next) => {
+    try {
+      const { conversationId, messageId } = req.params;
+      if (!validRecordId(messageId) || messageId.length > 120) {
+        return res.status(400).json({ error: "Invalid message ID." });
+      }
+      const scope = String(req.query.scope || req.body?.scope || "me").trim().toLowerCase();
+      if (!["me", "everyone"].includes(scope)) {
+        return res.status(400).json({ error: "Choose delete for me or delete for everyone." });
+      }
+
+      const authorized = await authorizedConversation(conversationId, req.user.uid);
+      if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
+
+      const messageRef = database.ref(`messaging/messages/${conversationId}/${messageId}`);
+      const msgSnap = await messageRef.get();
+      if (!msgSnap.exists()) return res.status(404).json({ error: "Message not found." });
+      const message = msgSnap.val();
+      const now = Date.now();
+
+      if (scope === "everyone") {
+        if (message.senderUid !== req.user.uid) {
+          return res.status(403).json({ error: "Only the sender can delete a message for everyone." });
+        }
+        await database.ref().update({
+          [`messaging/messages/${conversationId}/${messageId}/deletedForEveryone`]: true,
+          [`messaging/messages/${conversationId}/${messageId}/deletedAt`]: now,
+          [`messaging/messages/${conversationId}/${messageId}/deletedBy`]: req.user.uid,
+          [`messaging/messages/${conversationId}/${messageId}/text`]: ""
+        });
+        const allMsgs = snapshotToList((await database.ref(`messaging/messages/${conversationId}`).get()).val())
+          .sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+        const newest = allMsgs[allMsgs.length - 1];
+        if (!newest || newest.id === messageId) {
+          const preview = "This message was deleted";
+          await Promise.all([
+            database.ref(`messaging/conversations/${conversationId}/lastMessagePreview`).set(preview),
+            updateUserConversation(req.user.uid, conversationId, (c) => ({ ...c, lastMessagePreview: preview })),
+            updateUserConversation(authorized.otherUid, conversationId, (c) => ({ ...c, lastMessagePreview: preview }))
+          ]);
+        }
+        return res.json({ ok: true, id: messageId, scope: "everyone" });
+      }
+
+      await database.ref(`messaging/messages/${conversationId}/${messageId}/deletedFor/${req.user.uid}`).set(true);
+      const visibleRemaining = snapshotToList((await database.ref(`messaging/messages/${conversationId}`).get()).val())
+        .filter((item) => item?.deletedFor?.[req.user.uid] !== true)
+        .sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+      const latestForMe = visibleRemaining[visibleRemaining.length - 1];
+      const nextPreview = latestForMe
+        ? (latestForMe.deletedForEveryone ? "This message was deleted" : String(latestForMe.text || "").slice(0, 160))
+        : "Conversation started";
+      await updateUserConversation(req.user.uid, conversationId, (current) => ({
+        ...current,
+        lastMessagePreview: nextPreview,
+        lastMessageAt: Number(latestForMe?.createdAt || current.lastMessageAt) || 0
+      }));
+      res.json({ ok: true, id: messageId, scope: "me" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/messages/conversations/:conversationId/typing", requireAuth, async (req, res, next) => {
+    try {
+      if (!payloadHasOnly(req.body, ["isTyping"])) return res.status(400).json({ error: "Unsupported typing payload." });
+      const conversationId = req.params.conversationId;
+      const authorized = await authorizedConversation(conversationId, req.user.uid);
+      if (authorized.error) return res.status(authorized.status).json({ error: authorized.error });
+      const isTyping = Boolean(req.body.isTyping);
+      const now = Date.now();
+      await database.ref(`messaging/typing/${conversationId}/${req.user.uid}`).set({ isTyping, updatedAt: now });
+      res.json({ ok: true, isTyping, updatedAt: now });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/messages/presence", requireAuth, async (req, res, next) => {
+    try {
+      if (!payloadHasOnly(req.body, ["online"])) return res.status(400).json({ error: "Unsupported presence payload." });
+      const now = Date.now();
+      const online = Boolean(req.body.online);
+      await database.ref(`messaging/presence/${req.user.uid}`).set({ online, lastSeenAt: now });
+      res.json({ ok: true, online, lastSeenAt: now });
     } catch (error) {
       next(error);
     }

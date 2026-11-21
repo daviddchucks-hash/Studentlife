@@ -66,6 +66,22 @@
           ".read": "auth != null && auth.uid === $uid",
           ".write": false
         }
+      },
+      "typing": {
+        "$conversationId": {
+          "$uid": {
+            ".read": "auth != null && root.child('messaging/conversationAccess').child(auth.uid).child($conversationId).val() === true && root.child('messaging/conversations').child($conversationId).child('participants').child(auth.uid).val() === true && root.child('messaging/conversations').child($conversationId).child('status').val() === 'active'",
+            ".write": "auth != null && auth.uid === $uid && root.child('messaging/conversationAccess').child(auth.uid).child($conversationId).val() === true && root.child('messaging/conversations').child($conversationId).child('participants').child(auth.uid).val() === true && root.child('messaging/conversations').child($conversationId).child('status').val() === 'active'",
+            ".validate": "newData.val() === null || (newData.hasChildren(['isTyping', 'updatedAt']) && newData.child('isTyping').isBoolean() && newData.child('updatedAt').isNumber())"
+          }
+        }
+      },
+      "presence": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.val() === null || (newData.hasChildren(['online', 'lastSeenAt']) && newData.child('online').isBoolean() && newData.child('lastSeenAt').isNumber())"
+        }
       }
     }
   }

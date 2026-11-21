@@ -303,3 +303,22 @@ export function dbOff(targetQuery, eventType, listener) {
     fbDbMod.off(targetQuery, eventType, listener);
   }
 }
+
+export async function dbSet(targetRef, value) {
+  if (firebaseEnabled && fbDbMod && targetRef) {
+    return fbDbMod.set(targetRef, value);
+  }
+}
+
+export async function dbRemove(targetRef) {
+  if (firebaseEnabled && fbDbMod && targetRef) {
+    return fbDbMod.remove(targetRef);
+  }
+}
+
+export function dbOnDisconnect(targetRef) {
+  if (firebaseEnabled && fbDbMod && targetRef && typeof fbDbMod.onDisconnect === "function") {
+    return fbDbMod.onDisconnect(targetRef);
+  }
+  return null;
+}
