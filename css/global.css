@@ -1,38 +1,74 @@
 :root {
   color-scheme: light;
-  --theme-bg-primary: #f4f7fa;
-  --theme-bg-secondary: #eaf0f5;
-  --theme-surface: #ffffff;
-  --theme-surface-alt: #f2f6fa;
-  --theme-nav-bg: rgba(255, 255, 255, 0.92);
-  --theme-modal-bg: #ffffff;
-  --theme-text-primary: #14232b;
-  --theme-text-secondary: #566873;
-  --theme-accent-primary: #174e74;
+  /* Exact 28 Standard Theme Design Tokens */
+  --bg-primary: #f4f7fa;
+  --bg-secondary: #eaf0f5;
+  --bg-tertiary: #dfe8ef;
+  --surface-primary: #ffffff;
+  --surface-secondary: #f2f6fa;
+  --surface-elevated: #ffffff;
+  --text-primary: #14232b;
+  --text-secondary: #50626e;
+  --text-muted: #5e7280;
+  --accent-primary: #174e74;
+  --accent-secondary: #246b99;
+  --accent-foreground: #ffffff;
+  --border-color: #dbe4ea;
+  --input-background: #ffffff;
+  --input-border: #cbd5dc;
+  --button-background: #174e74;
+  --button-text: #ffffff;
+  --navigation-background: rgba(255, 255, 255, 0.94);
+  --navigation-text: #14232b;
+  --navigation-active: #eaf3fb;
+  --card-background: #ffffff;
+  --modal-background: #ffffff;
+  --success-color: #1e6f4f;
+  --warning-color: #945a0a;
+  --error-color: #b24a42;
+  --message-sent-background: #174e74;
+  --message-received-background: #ffffff;
+  --focus-ring: rgba(23, 78, 116, 0.25);
+
+  /* Extended Theme & Platform Variables */
+  --theme-bg-primary: var(--bg-primary);
+  --theme-bg-secondary: var(--bg-secondary);
+  --theme-surface: var(--surface-primary);
+  --theme-surface-alt: var(--surface-secondary);
+  --theme-nav-bg: var(--navigation-background);
+  --theme-modal-bg: var(--modal-background);
+  --theme-text-primary: var(--text-primary);
+  --theme-text-secondary: var(--text-secondary);
+  --theme-accent-primary: var(--accent-primary);
   --theme-accent-primary-hover: #113d5b;
-  --theme-accent-secondary: #246b99;
+  --theme-accent-secondary: var(--accent-secondary);
   --theme-accent-soft: #eaf3fb;
-  --theme-button-bg: #174e74;
+  --theme-button-bg: var(--button-background);
   --theme-button-hover: #113d5b;
-  --theme-button-text: #ffffff;
-  --theme-border: #dbe4ea;
+  --theme-button-text: var(--button-text);
+  --theme-border: var(--border-color);
   --theme-border-strong: #aab8c2;
-  --theme-input-bg: #ffffff;
-  --theme-input-border: #cbd5dc;
+  --theme-input-bg: var(--input-background);
+  --theme-input-border: var(--input-border);
   --theme-hover-bg: #eff4f7;
-  --theme-nav-active-bg: #eaf3fb;
-  --theme-nav-active-text: #174e74;
-  --theme-success: #1e6f4f;
+  --theme-nav-active-bg: var(--navigation-active);
+  --theme-nav-active-text: var(--accent-primary);
+  --theme-success: var(--success-color);
   --theme-success-soft: #eaf8f0;
-  --theme-warning: #945a0a;
+  --theme-success-foreground: #ffffff;
+  --theme-warning: var(--warning-color);
   --theme-warning-soft: #fff6e3;
-  --theme-error: #b24a42;
+  --theme-error: var(--error-color);
   --theme-error-soft: #fff1f0;
-  --theme-msg-received-bg: #ffffff;
-  --theme-msg-received-text: #14232b;
-  --theme-msg-sent-bg: #174e74;
+  --theme-error-foreground: #ffffff;
+  --theme-msg-received-bg: var(--message-received-background);
+  --theme-msg-received-text: var(--text-primary);
+  --theme-msg-sent-bg: var(--message-sent-background);
   --theme-msg-sent-text: #ffffff;
-  --theme-focus-ring: rgba(23, 78, 116, 0.25);
+  --theme-msg-sent-read: #a7f3d0;
+  --theme-msg-sent-quote-bg: rgba(255, 255, 255, 0.16);
+  --theme-msg-sent-quote-hover: rgba(255, 255, 255, 0.24);
+  --theme-focus-ring: var(--focus-ring);
   --theme-shadow: 0 12px 32px rgba(20, 35, 43, 0.08);
   --theme-pop-1: #174e74;
   --theme-pop-2: #246b99;
@@ -42,18 +78,18 @@
   --theme-pop-6: #945a0a;
 
   /* Platform variable aliases */
-  --ink: var(--theme-text-primary);
-  --muted: var(--theme-text-secondary);
-  --blue: var(--theme-accent-primary);
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --blue: var(--accent-primary);
   --blue-dark: var(--theme-accent-primary-hover);
   --blue-soft: var(--theme-accent-soft);
-  --line: var(--theme-border);
-  --paper: var(--theme-surface);
-  --canvas: var(--theme-bg-primary);
-  --canvas-strong: var(--theme-bg-secondary);
-  --green: var(--theme-success);
+  --line: var(--border-color);
+  --paper: var(--card-background);
+  --canvas: var(--bg-primary);
+  --canvas-strong: var(--bg-secondary);
+  --green: var(--success-color);
   --green-soft: var(--theme-success-soft);
-  --danger: var(--theme-error);
+  --danger: var(--error-color);
   --danger-soft: var(--theme-error-soft);
   --shadow-soft: var(--theme-shadow);
   --radius: 14px;
@@ -245,17 +281,21 @@ input, select, textarea {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--theme-input-border);
+  border: 1px solid var(--input-border);
   border-radius: 7px;
   outline: none;
-  background: var(--theme-input-bg);
-  color: var(--ink);
+  background: var(--input-background);
+  color: var(--text-primary);
   font-size: 14px;
 }
-input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.85; }
+select option, select optgroup {
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 0.9; }
 input:focus, select:focus, textarea:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--theme-focus-ring);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 textarea { min-height: 100px; resize: vertical; }
 table { width: 100%; border-collapse: collapse; color: var(--ink); }

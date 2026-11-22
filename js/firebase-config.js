@@ -264,6 +264,32 @@ export async function signInWithEmail({ email, password }) {
   return { user: auth.currentUser };
 }
 
+export async function updateStudentDisplayName(name) {
+  const cleanName = typeof name === "string" ? name.trim() : "";
+  if (firebaseEnabled && fbAuthMod && auth?.currentUser) {
+    try {
+      await fbAuthMod.updateProfile(auth.currentUser, { displayName: cleanName });
+    } catch {
+      // Non-fatal: server database remains authoritative for profile fields
+    }
+    return;
+  }
+
+  if (backendAuthMode === "in-memory") {
+    const session = readStoredSession();
+    if (session?.user) {
+      writeStoredSession({
+        ...session,
+        user: {
+          ...session.user,
+          name: cleanName,
+          displayName: cleanName
+        }
+      });
+    }
+  }
+}
+
 export async function signOutUser() {
   if (firebaseEnabled && fbAuthMod) {
     return fbAuthMod.signOut(auth);

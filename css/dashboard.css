@@ -123,7 +123,7 @@
 .emergency-card { padding: 16px; border: 1px solid var(--danger); border-left: 4px solid var(--danger); border-radius: 8px; background: var(--danger-soft); }
 .emergency-card h3 { margin: 0 0 6px; font-size: 16px; color: var(--danger); }
 .emergency-card p { margin: 0 0 10px; font-size: 13px; color: var(--ink); }
-.emergency-card a.call-btn { display: inline-block; padding: 6px 12px; border-radius: 6px; background: var(--danger); color: #ffffff; font-weight: 700; font-size: 12px; }
+.emergency-card a.call-btn { display: inline-block; padding: 6px 12px; border-radius: 6px; background: var(--error-color); color: var(--theme-error-foreground); font-weight: 700; font-size: 12px; }
 
 .admin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
 .admin-tab-btn { padding: 8px 14px; border: none; background: transparent; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }

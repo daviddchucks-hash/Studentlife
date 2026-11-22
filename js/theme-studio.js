@@ -1,6 +1,7 @@
 import {
   getThemes,
   getBackgroundPresets,
+  isSystemDarkMode,
   getThemeDefinition,
   resolveCustomTheme,
   getCurrentPreference,
@@ -199,11 +200,13 @@ export function renderThemeStudio(container, options = {}) {
       if (saved.customColors) {
         customDraft = { ...getDefaultCustomColors(), ...saved.customColors };
       }
-      statusNotice = { type: "success", text: successMessage };
+      statusNotice = saved.cloudSynced === false && saved.pendingSync
+        ? { type: "info", text: `${successMessage} Saved locally and queued for account sync.` }
+        : { type: "success", text: successMessage };
     } catch (error) {
       statusNotice = {
-        type: "warning",
-        text: `${error?.message || "Saved locally on this device; sign-in sync will retry automatically."}`
+        type: "info",
+        text: `${error?.message || "Saved locally on this device; cloud sync will retry automatically."}`
       };
       savedPref = nextPref;
       previewPref = null;
@@ -238,6 +241,9 @@ export function renderThemeStudio(container, options = {}) {
     const isPreviewingDifferent = Boolean(
       previewPref && !isThemeMatch(savedPref, previewPref.themeId, previewPref.customColors)
     );
+    const osDark = isSystemDarkMode();
+    const isSystemActive = savedPref.themeId === "system-default";
+    const isSystemPreviewing = isPreviewingDifferent && previewPref.themeId === "system-default";
 
     const visibleThemes = filterThemes(themes);
     const customResolved = resolveCustomTheme(customDraft);
@@ -263,7 +269,7 @@ export function renderThemeStudio(container, options = {}) {
           <span class="studio-active-swatch-dot" aria-hidden="true"></span>
           <div class="studio-active-summary-text">
             <strong>${escapeHtml(activeTheme.name)}</strong>
-            <span>${activeTheme.mode === "dark" ? "Dark appearance" : "Light appearance"} · Synced to account</span>
+            <span>${activeTheme.mode === "dark" ? "Dark appearance" : "Light appearance"} · ${savedPref.pendingSync ? "Saved on device (sync pending)" : "Synced to account"}</span>
           </div>
         </div>
       </div>
@@ -281,9 +287,37 @@ export function renderThemeStudio(container, options = {}) {
         <div class="studio-block-head">
           <div>
             <h3>1. Appearance mode</h3>
-            <p class="muted" style="margin:2px 0 0;">Filter themes by brightness and palette mood.</p>
+            <p class="muted" style="margin:2px 0 0;">Follow your device OS setting automatically or filter curated themes by style.</p>
           </div>
         </div>
+
+        <div class="system-default-card ${isSystemActive ? "is-active" : ""}">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <strong>System Default</strong>
+              ${isSystemActive ? `<span class="theme-active-indicator">✓ Active</span>` : ""}
+              ${isSystemPreviewing ? `<span class="theme-active-indicator is-preview">Previewing</span>` : ""}
+            </div>
+            <p class="muted" style="margin:4px 0 0; font-size:13px;">
+              Automatically switches between Classic Light and Midnight Dark based on your device settings (Currently detected: <strong>${osDark ? "Dark mode" : "Light mode"}</strong>).
+            </p>
+          </div>
+          <div class="inline-actions" style="margin-top:0;">
+            <button
+              type="button"
+              class="button button-quiet button-small"
+              data-preview-theme="system-default"
+              ${isSystemPreviewing ? "disabled" : ""}
+            >${isSystemPreviewing ? "Previewing" : "Preview"}</button>
+            <button
+              type="button"
+              class="button button-primary button-small"
+              data-apply-theme="system-default"
+              ${isSaving || (isSystemActive && !isPreviewingDifferent) ? "disabled" : ""}
+            >${isSystemActive && !isPreviewingDifferent ? "Following System" : "Use System Default"}</button>
+          </div>
+        </div>
+
         <div class="appearance-mode-bar" role="group" aria-label="Filter themes by appearance mode">
           ${modeOptions.map((opt) => `
             <button
@@ -522,7 +556,7 @@ export function renderThemeStudio(container, options = {}) {
         const def = getThemeDefinition(themeId);
         void commitThemePreference(
           { themeId, customColors: null },
-          `${def.name} theme applied across AFITStudentLife.`
+          `${def.name} applied across AFITStudentLife.`
         );
       });
     });
@@ -594,8 +628,6 @@ export function renderThemeStudio(container, options = {}) {
       customDraft = getDefaultCustomColors();
       if (previewPref?.themeId === "custom") {
         previewTheme({ themeId: "custom", customColors: { ...customDraft } });
-      } else {
-        render();
       }
       statusNotice = { type: "info", text: "Custom colour pickers reset to default AFIT palette." };
       render();
@@ -611,17 +643,25 @@ export function renderThemeStudio(container, options = {}) {
         savedPref = saved;
         previewPref = null;
         customDraft = getDefaultCustomColors();
-        statusNotice = { type: "success", text: "Default Classic Light theme restored." };
+        statusNotice = saved.cloudSynced === false && saved.pendingSync
+          ? { type: "info", text: "Classic Light restored on this device and queued for sync." }
+          : { type: "success", text: "Default Classic Light theme restored." };
       } catch (error) {
         savedPref = { themeId: "classic-light", customColors: null };
         previewPref = null;
-        statusNotice = { type: "warning", text: error?.message || "Classic Light restored locally." };
+        statusNotice = { type: "info", text: error?.message || "Classic Light restored locally." };
       } finally {
         isSaving = false;
         render();
       }
     });
   }
+
+  document.addEventListener("afit-theme-changed", () => {
+    if (savedPref.themeId === "system-default" || previewPref?.themeId === "system-default") {
+      render();
+    }
+  });
 
   render();
 

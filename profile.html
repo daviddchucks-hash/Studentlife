@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8fa">
+  <meta name="theme-color" content="#f4f7fa">
   <title>Settings &amp; Profile — AFITStudentLife</title>
   <script src="./js/theme-boot.js"></script>
   <link rel="stylesheet" href="./css/global.css">
@@ -17,18 +17,69 @@
       <div class="settings-jump-bar">
         <div>
           <p class="eyebrow">Your account &amp; preferences</p>
-          <h1>Settings, Profile &amp; Appearance</h1>
-          <p>Manage your student details, matriculation verification, and personalized platform theme.</p>
+          <h1>Settings</h1>
+          <p>Manage your student profile, account credentials, platform appearance, and privacy controls.</p>
         </div>
         <nav class="settings-tabs" aria-label="Settings sections">
-          <a href="#profile-container" class="settings-tab-link active" data-settings-tab="profile">Student Profile</a>
-          <a href="#themes" class="settings-tab-link" data-settings-tab="themes">Appearance &amp; Themes</a>
+          <button type="button" class="settings-tab-link active" data-settings-tab="all" aria-pressed="true">All Sections</button>
+          <button type="button" class="settings-tab-link" data-settings-tab="profile" aria-pressed="false">Profile</button>
+          <button type="button" class="settings-tab-link" data-settings-tab="account" aria-pressed="false">Account Settings</button>
+          <button type="button" class="settings-tab-link" data-settings-tab="themes" aria-pressed="false">Appearance &amp; Themes</button>
+          <button type="button" class="settings-tab-link" data-settings-tab="security" aria-pressed="false">Security &amp; Privacy</button>
         </nav>
       </div>
     </section>
 
-    <div id="profile-container" class="dashboard-section"></div>
-    <section id="themes" class="dashboard-section theme-studio-section" aria-labelledby="appearance-themes-heading"></section>
+    <section id="profile-section" class="dashboard-section settings-panel" data-settings-section="profile" aria-label="Student Profile">
+      <div id="profile-container"></div>
+    </section>
+
+    <section id="account-section" class="dashboard-section settings-panel" data-settings-section="account" aria-labelledby="account-settings-heading">
+      <div class="studio-block-head" style="margin-bottom:14px;">
+        <div>
+          <p class="eyebrow">Account overview</p>
+          <h2 id="account-settings-heading" style="margin:0;">Account Settings</h2>
+          <p class="muted" style="margin:4px 0 0;">Review your linked AFITStudentLife credentials and manage your active session.</p>
+        </div>
+        <div class="inline-actions" style="margin-top:0;">
+          <button type="button" class="button button-quiet button-small" id="refresh-account-btn">Refresh Profile Data</button>
+          <button type="button" class="button button-outline button-small" id="settings-signout-btn">Sign out</button>
+        </div>
+      </div>
+      <div id="account-settings-body" class="view-field-group">
+        <p class="muted">Loading account details…</p>
+      </div>
+      <div id="account-settings-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="themes" class="dashboard-section settings-panel theme-studio-section" data-settings-section="themes" aria-labelledby="appearance-themes-heading"></section>
+
+    <section id="security-section" class="dashboard-section settings-panel" data-settings-section="security" aria-labelledby="security-privacy-heading">
+      <div class="studio-block-head" style="margin-bottom:14px;">
+        <div>
+          <p class="eyebrow">Safety &amp; access control</p>
+          <h2 id="security-privacy-heading" style="margin:0;">Security &amp; Privacy</h2>
+          <p class="muted" style="margin:4px 0 0;">Control student discoverability, messaging safety, and session protection.</p>
+        </div>
+      </div>
+      <div id="security-privacy-body" class="settings-security-grid">
+        <article class="settings-info-tile">
+          <h3>Authentication &amp; Session</h3>
+          <p class="muted">Your account uses verified Firebase Authentication tokens. Sign out whenever using a shared lab or library computer.</p>
+          <span class="badge badge-success" id="security-auth-badge">Protected session active</span>
+        </article>
+        <article class="settings-info-tile">
+          <h3>Blocked Students &amp; Messaging</h3>
+          <p class="muted">Review or unblock students you have blocked inside AFITStudentLife Messaging.</p>
+          <a href="./messages.html" class="button button-outline button-small">Open Messaging Privacy</a>
+        </article>
+        <article class="settings-info-tile">
+          <h3>CourseMate Visibility</h3>
+          <p class="muted">Choose whether classmates taking the same registered courses can discover and connect with you.</p>
+          <a href="./coursemate.html" class="button button-outline button-small">Manage CourseMate Privacy</a>
+        </article>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer app-footer">

@@ -474,6 +474,7 @@ const VALID_THEME_IDS = new Set([
   "cyber-neon",
   "sky-blue",
   "royal-purple",
+  "system-default",
   "custom"
 ]);
 

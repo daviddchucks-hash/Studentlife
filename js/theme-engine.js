@@ -25,6 +25,10 @@ export function getBackgroundPresets() {
   return getCore().BACKGROUND_PRESETS;
 }
 
+export function isSystemDarkMode() {
+  return getCore().detectSystemDarkMode();
+}
+
 export function getThemeDefinition(themeId, customColors) {
   return getCore().getThemeById(themeId, customColors);
 }
@@ -49,28 +53,49 @@ export function applyThemePreference(preference, options = {}) {
   return getCore().applyTheme(preference, options);
 }
 
+function buildServerThemeBody(payload) {
+  return {
+    themeId: payload.themeId,
+    ...(payload.themeId === "custom" && payload.customColors ? { customColors: payload.customColors } : {})
+  };
+}
+
 export async function saveAndApplyTheme(preference, uid = "") {
   const core = getCore();
   const effectiveUid = uid || core.getActiveUid();
   const payload = core.normalizePreference({
     ...preference,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    pendingSync: true
   });
 
   core.applyTheme(payload, { animate: true });
   core.saveStoredPreferenceForUid(effectiveUid, payload);
 
-  if (effectiveUid) {
-    syncedUid = effectiveUid;
+  if (!effectiveUid) {
+    return { ...payload, pendingSync: false, cloudSynced: false };
+  }
+
+  syncedUid = effectiveUid;
+  try {
     await apiRequest("/api/profile/theme", {
       method: "PUT",
-      body: {
-        themeId: payload.themeId,
-        ...(payload.customColors ? { customColors: payload.customColors } : {})
-      }
+      body: buildServerThemeBody(payload),
+      timeoutMs: 12000
     });
+    const cleanSynced = core.saveStoredPreferenceForUid(effectiveUid, {
+      ...payload,
+      pendingSync: false
+    });
+    return { ...cleanSynced, cloudSynced: true };
+  } catch (err) {
+    return {
+      ...payload,
+      pendingSync: true,
+      cloudSynced: false,
+      syncError: err?.message || "Saved on this device; cloud sync will retry automatically."
+    };
   }
-  return payload;
 }
 
 export async function resetToDefaultTheme(uid = "") {
@@ -82,6 +107,24 @@ export function handleSignOutThemeReset() {
   syncedUid = "";
   syncPromise = null;
   getCore().clearActiveSessionTheme();
+}
+
+async function flushPendingSync(uid, localPref) {
+  const core = getCore();
+  try {
+    await apiRequest("/api/profile/theme", {
+      method: "PUT",
+      body: buildServerThemeBody(localPref),
+      timeoutMs: 12000
+    });
+    const synced = core.saveStoredPreferenceForUid(uid, {
+      ...localPref,
+      pendingSync: false
+    });
+    return synced;
+  } catch {
+    return localPref;
+  }
 }
 
 export async function syncStudentTheme(user, knownProfileTheme = null) {
@@ -107,8 +150,18 @@ export async function syncStudentTheme(user, knownProfileTheme = null) {
     }
   }
 
+  // Push pending offline/local change before accepting older cloud preference
+  if (localForUser?.pendingSync) {
+    core.applyTheme(localForUser, { animate: false });
+    syncedUid = uid;
+    return flushPendingSync(uid, localForUser);
+  }
+
   if (knownProfileTheme && typeof knownProfileTheme === "object") {
-    const normalizedCloud = core.normalizePreference(knownProfileTheme);
+    const normalizedCloud = core.normalizePreference({
+      ...knownProfileTheme,
+      pendingSync: false
+    });
     core.saveStoredPreferenceForUid(uid, normalizedCloud);
     core.applyTheme(normalizedCloud, { animate: false });
     syncedUid = uid;
@@ -125,8 +178,8 @@ export async function syncStudentTheme(user, knownProfileTheme = null) {
     .then((me) => {
       const serverTheme = me?.profile?.themePreference;
       const effective = serverTheme
-        ? core.normalizePreference(serverTheme)
-        : (localForUser || { themeId: core.DEFAULT_THEME_ID, customColors: null });
+        ? core.normalizePreference({ ...serverTheme, pendingSync: false })
+        : (localForUser || { themeId: core.DEFAULT_THEME_ID, customColors: null, pendingSync: false });
 
       core.saveStoredPreferenceForUid(uid, effective);
       core.applyTheme(effective, { animate: false });
