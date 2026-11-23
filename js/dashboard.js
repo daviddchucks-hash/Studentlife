@@ -1,12 +1,15 @@
 import { watchAuthState } from "./firebase-config.js";
 import { apiConfigured, apiRequest } from "./api.js";
 import { initNavigation } from "./nav.js";
+import { getCurrentPersonalization, normalizePersonalization, syncStudentTheme } from "./theme-engine.js";
 
 const welcomeTitle = document.querySelector("#welcome-title");
+const welcomeSubtitle = document.querySelector("#welcome-subtitle");
 const setupNotice = document.querySelector("#setup-notice");
 const overviewStats = document.querySelector("#overview-stats");
 
 let activeUid = null;
+let studentDisplayName = "Student";
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -17,6 +20,97 @@ function formatDate(value) {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
+
+function formatDashboardGreeting(dashboardCfg, displayName = "Student") {
+  const cleanName = String(displayName || "").trim() || "Student";
+  const showName = dashboardCfg?.showGreetingName !== false;
+  const style = dashboardCfg?.greetingStyle || "time-based";
+  let prefix = "Welcome back";
+
+  if (style === "time-based") {
+    const hour = new Date().getHours();
+    prefix = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  } else if (style === "focused") {
+    prefix = "Ready to focus";
+  } else if (style === "academic") {
+    prefix = "Make today count";
+  } else if (style === "custom") {
+    const custom = String(dashboardCfg?.customGreeting || "").trim();
+    prefix = custom || "Welcome back";
+  }
+
+  return showName ? `${prefix}, ${cleanName}.` : `${prefix}.`;
+}
+
+function applyDashboardLayout(rawPersonalization) {
+  const pers = normalizePersonalization(rawPersonalization || getCurrentPersonalization());
+  const db = pers.dashboard;
+
+  if (welcomeTitle) {
+    welcomeTitle.textContent = formatDashboardGreeting(db, studentDisplayName);
+  }
+  if (welcomeSubtitle) {
+    welcomeSubtitle.textContent = db.greetingStyle === "focused"
+      ? "Distraction-free view of your courses, deadlines, and study workspace."
+      : db.greetingStyle === "academic"
+        ? "Track your classes, assignments, and exams in one place."
+        : "Here is your academic overview for today.";
+  }
+
+  // Toggle visibility of widgets
+  const widgets = db.widgets || {};
+  document.querySelectorAll("[data-dashboard-widget]").forEach((el) => {
+    const key = el.dataset.dashboardWidget;
+    const visible = widgets[key] !== false;
+    el.hidden = !visible;
+    el.style.display = visible ? "" : "none";
+  });
+
+  // Hide container rows if all children inside them are hidden
+  const overviewGrid = document.querySelector("#overview-grid");
+  if (overviewGrid) {
+    const visibleCards = Array.from(overviewGrid.querySelectorAll("[data-overview-card]"))
+      .filter((el) => widgets[el.dataset.overviewCard] !== false);
+    overviewGrid.hidden = visibleCards.length === 0;
+    overviewGrid.style.display = visibleCards.length === 0 ? "none" : "";
+
+    const orderedCards = db.overviewOrder || [];
+    for (const key of orderedCards) {
+      const card = overviewGrid.querySelector(`[data-overview-card="${key}"]`);
+      if (card) overviewGrid.appendChild(card);
+    }
+  }
+
+  const overviewSection = document.querySelector('[data-dashboard-section="overview"]');
+  if (overviewSection) {
+    const statsVisible = widgets.stats !== false;
+    const anyOverviewCardVisible = (db.overviewOrder || []).some((key) => widgets[key] !== false);
+    const showOverview = statsVisible || anyOverviewCardVisible;
+    overviewSection.hidden = !showOverview;
+    overviewSection.style.display = showOverview ? "" : "none";
+  }
+
+  const lowerSection = document.querySelector('[data-dashboard-section="lowerPanels"]');
+  if (lowerSection) {
+    const anyLower = widgets.quickNav !== false || widgets.gradingNote !== false;
+    lowerSection.hidden = !anyLower;
+    lowerSection.style.display = anyLower ? "" : "none";
+  }
+
+  // Reorder top-level dashboard sections inside main.dashboard-wrap
+  const mainWrap = document.querySelector("main.dashboard-wrap");
+  if (mainWrap) {
+    const sectionOrder = db.sectionOrder || [];
+    for (const key of sectionOrder) {
+      const sec = mainWrap.querySelector(`[data-dashboard-section="${key}"]`);
+      if (sec) mainWrap.appendChild(sec);
+    }
+  }
+}
+
+document.addEventListener("afit-personalization-changed", (event) => {
+  applyDashboardLayout(event?.detail?.personalization || getCurrentPersonalization());
+});
 
 function renderItems(targetId, items, emptyMessage, renderItem) {
   const target = document.querySelector(`#${targetId}`);
@@ -38,6 +132,11 @@ async function loadOverview(user) {
     ]);
 
     if (user.uid !== activeUid) return;
+
+    if (dashData?.student?.name) {
+      studentDisplayName = dashData.student.name;
+      applyDashboardLayout(getCurrentPersonalization());
+    }
 
     const stats = dashData.stats || {};
     overviewStats.innerHTML = [
@@ -122,11 +221,17 @@ watchAuthState((user) => {
   if (activeUid === user.uid) return;
   activeUid = user.uid;
 
-  const name = user.displayName || user.email?.split("@")[0] || "Student";
-  if (welcomeTitle) welcomeTitle.textContent = `Welcome back, ${name}.`;
+  studentDisplayName = user.displayName || user.email?.split("@")[0] || "Student";
+  applyDashboardLayout(getCurrentPersonalization());
 
   initNavigation("dashboard");
   renderHubCards();
+
+  void syncStudentTheme(user).then((syncedPers) => {
+    if (syncedPers && user.uid === activeUid) {
+      applyDashboardLayout(syncedPers);
+    }
+  });
 
   const search = document.querySelector("#platform-search");
   if (search) {

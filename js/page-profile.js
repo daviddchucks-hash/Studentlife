@@ -541,6 +541,9 @@ function initProfilePage() {
         lastProfileInfo = updatedInfo;
         lastProfileError = "";
         renderAccountSummary(updatedInfo, effectiveUser);
+        if (studio && updatedInfo?.name) {
+          studio.updateFromAccount({ studentName: updatedInfo.name });
+        }
       },
       onProfileError: (err) => {
         lastProfileInfo = null;
@@ -552,13 +555,15 @@ function initProfilePage() {
     });
 
     if (summary && studio) {
+      const incomingCloud = summary.personalization || summary.themePreference || null;
       const synced = await syncStudentTheme(
         { uid: summary.uid },
-        summary.themePreference || null
+        incomingCloud
       ).catch(() => null);
       studio.updateFromAccount({
         userUid: summary.uid,
-        preference: synced || summary.themePreference || null
+        personalization: synced || incomingCloud || null,
+        studentName: summary.name || effectiveUser?.displayName || ""
       });
     }
     return summary;
@@ -649,7 +654,10 @@ function initProfilePage() {
     }
 
     if (studio) {
-      studio.updateFromAccount({ userUid: user.uid });
+      studio.updateFromAccount({
+        userUid: user.uid,
+        studentName: user.displayName || ""
+      });
     }
     renderAccountSummary(lastProfileInfo, user);
 

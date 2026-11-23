@@ -19,7 +19,7 @@
       <div>
         <p class="eyebrow">Student Dashboard</p>
         <h1 id="welcome-title">Welcome back, Student.</h1>
-        <p class="muted">Here is your academic overview for today.</p>
+        <p class="muted" id="welcome-subtitle">Here is your academic overview for today.</p>
       </div>
       <div class="privacy-note">
         <span class="privacy-dot"></span>
@@ -27,8 +27,10 @@
       </div>
     </section>
 
+    <div class="setup-notice" id="setup-notice" hidden role="status"></div>
+
     <!-- Quick Action Shortcuts -->
-    <div class="dashboard-section" style="margin-bottom:20px; padding:16px;">
+    <div class="dashboard-section" data-dashboard-section="quickActions" data-dashboard-widget="quickActions" style="margin-bottom:20px; padding:16px;">
       <p class="eyebrow" style="margin-bottom:8px;">Quick Actions</p>
       <div class="inline-actions">
         <a href="./messages.html" class="button button-small button-primary">💬 Messages</a>
@@ -42,17 +44,15 @@
       </div>
     </div>
 
-    <div class="setup-notice" id="setup-notice" hidden role="status"></div>
-
-    <section class="dashboard-overview" aria-label="Your academic overview">
-      <div class="overview-stats" id="overview-stats" aria-live="polite">
+    <section class="dashboard-overview" data-dashboard-section="overview" aria-label="Your academic overview">
+      <div class="overview-stats" id="overview-stats" data-dashboard-widget="stats" aria-live="polite">
         <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
         <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
         <article class="summary-stat skeleton-stat" aria-hidden="true"></article>
       </div>
 
-      <div class="overview-grid">
-        <section class="overview-panel">
+      <div class="overview-grid" id="overview-grid">
+        <section class="overview-panel" data-overview-card="todayClasses" data-dashboard-widget="todayClasses">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <p class="eyebrow">Today's Classes</p>
             <a href="./timetable.html" class="text-link">Full Timetable →</a>
@@ -60,7 +60,7 @@
           <div id="today-classes" class="summary-list"><p class="muted">Loading today's schedule…</p></div>
         </section>
 
-        <section class="overview-panel">
+        <section class="overview-panel" data-overview-card="currentCourses" data-dashboard-widget="currentCourses">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <p class="eyebrow">Current Courses</p>
             <a href="./courses.html" class="text-link">All Courses →</a>
@@ -68,7 +68,7 @@
           <div id="current-courses" class="summary-list"><p class="muted">Loading…</p></div>
         </section>
 
-        <section class="overview-panel">
+        <section class="overview-panel" data-overview-card="upcomingAssignments" data-dashboard-widget="upcomingAssignments">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <p class="eyebrow">Upcoming Assignments</p>
             <a href="./assignments.html" class="text-link">Assignments →</a>
@@ -76,7 +76,7 @@
           <div id="upcoming-assignments" class="summary-list"><p class="muted">Loading…</p></div>
         </section>
 
-        <section class="overview-panel">
+        <section class="overview-panel" data-overview-card="examCountdown" data-dashboard-widget="examCountdown">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <p class="eyebrow">Exam Countdown</p>
             <a href="./exams.html" class="text-link">Exams →</a>
@@ -87,7 +87,7 @@
     </section>
 
     <!-- Platform Main Hub Sections -->
-    <section class="dashboard-section" style="margin-top:20px;">
+    <section class="dashboard-section" data-dashboard-section="platformHub" data-dashboard-widget="platformHub" style="margin-top:20px;">
       <div class="section-heading compact">
         <div>
           <p class="eyebrow">Main Navigation Hub</p>
@@ -101,8 +101,8 @@
       <div class="tool-grid" id="tool-grid" aria-live="polite"></div>
     </section>
 
-    <section class="dashboard-lower">
-      <div class="lower-panel">
+    <section class="dashboard-lower" data-dashboard-section="lowerPanels">
+      <div class="lower-panel" data-dashboard-widget="quickNav">
         <div class="panel-heading">
           <div><p class="eyebrow">Quick Navigation</p><h2>Main Hub Pages</h2></div>
         </div>
@@ -122,7 +122,7 @@
           <a href="./community.html" class="recent-link">👥 Community</a>
         </div>
       </div>
-      <div class="lower-panel info-panel">
+      <div class="lower-panel info-panel" data-dashboard-widget="gradingNote">
         <p class="eyebrow">A quick note</p>
         <h2>Check your department’s grading scale.</h2>
         <p class="muted">Calculator defaults follow a common 5-point scale. Confirm your programme’s current grading rules before relying on a result.</p>

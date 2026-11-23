@@ -474,6 +474,11 @@ const VALID_THEME_IDS = new Set([
   "cyber-neon",
   "sky-blue",
   "royal-purple",
+  "amoled-black",
+  "warm-cream",
+  "ocean-blue",
+  "forest-green",
+  "lavender-mode",
   "system-default",
   "custom"
 ]);
@@ -483,12 +488,51 @@ const VALID_THEME_BG_PRESETS = new Set([
   "light-soft",
   "light-warm",
   "dark-midnight",
-  "dark-slate"
+  "dark-slate",
+  "dark-amoled"
 ]);
+
+const VALID_FONT_IDS = new Set([
+  "default",
+  "modern-sans",
+  "roboto-sans",
+  "rounded",
+  "classic-serif",
+  "handwriting",
+  "cursive-script",
+  "decorative",
+  "elegant-script",
+  "monospace"
+]);
+
+const VALID_FONT_SIZES = new Set(["small", "medium", "large", "xlarge"]);
+const VALID_BUTTON_STYLES = new Set(["rounded", "soft-square", "pill"]);
+const VALID_SPACINGS = new Set(["compact", "comfortable", "spacious"]);
+const VALID_CARD_STYLES = new Set(["bordered", "elevated", "tinted"]);
+const VALID_DENSITIES = new Set(["compact", "balanced", "relaxed"]);
+const VALID_MOTION_MODES = new Set(["smooth", "reduced"]);
+const VALID_SIDEBAR_STYLES = new Set(["topbar", "compact", "sidebar"]);
+const VALID_SIDEBAR_TONES = new Set(["neutral", "tinted", "accent"]);
+const VALID_FOCUS_MODES = new Set(["standard", "enhanced"]);
+const VALID_GREETING_STYLES = new Set(["time-based", "welcome", "focused", "academic", "custom"]);
+const VALID_PRESET_IDS = new Set(["", "minimalist", "student-focus", "creative", "elegant", "night-owl"]);
+const DEFAULT_SECTION_ORDER = ["quickActions", "overview", "platformHub", "lowerPanels"];
+const DEFAULT_OVERVIEW_ORDER = ["todayClasses", "currentCourses", "upcomingAssignments", "examCountdown"];
+const DEFAULT_WIDGET_KEYS = [
+  "quickActions",
+  "stats",
+  "todayClasses",
+  "currentCourses",
+  "upcomingAssignments",
+  "examCountdown",
+  "platformHub",
+  "quickNav",
+  "gradingNote"
+];
 
 function validateThemePreference(data) {
   if (!isPlainObject(data)) throw new ValidationError("Theme preference must be an object.");
-  const allowedKeys = new Set(["themeId", "customColors", "updatedAt"]);
+  const allowedKeys = new Set(["themeId", "customColors", "accentColor", "updatedAt"]);
   for (const key of Object.keys(data)) {
     if (!allowedKeys.has(key)) throw new ValidationError("Unsupported theme preference field.");
   }
@@ -525,9 +569,160 @@ function validateThemePreference(data) {
   if (themeId === "custom" && !customColors) {
     throw new ValidationError("Custom colors are required when activating a custom theme.");
   }
+  let accentColor = null;
+  if (data.accentColor !== undefined && data.accentColor !== null && data.accentColor !== "") {
+    if (typeof data.accentColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(data.accentColor.trim())) {
+      throw new ValidationError("Accent color must be a valid 6-digit hex color.");
+    }
+    accentColor = themeId === "custom" ? null : data.accentColor.trim().toLowerCase();
+  }
   return {
     themeId,
     ...(customColors ? { customColors } : {}),
+    ...(accentColor ? { accentColor } : {}),
+    updatedAt: Date.now()
+  };
+}
+
+function validateOrderArray(rawList, defaultList, label) {
+  if (rawList === undefined) return defaultList.slice();
+  if (!Array.isArray(rawList)) throw new ValidationError(`${label} must be an array.`);
+  const allowed = new Set(defaultList);
+  const seen = new Set();
+  const result = [];
+  for (const item of rawList) {
+    if (typeof item !== "string" || !allowed.has(item)) {
+      throw new ValidationError(`Unsupported item in ${label}.`);
+    }
+    if (!seen.has(item)) {
+      seen.add(item);
+      result.push(item);
+    }
+  }
+  for (const fallback of defaultList) {
+    if (!seen.has(fallback)) result.push(fallback);
+  }
+  return result;
+}
+
+function validatePersonalizationPreference(data) {
+  if (!isPlainObject(data)) throw new ValidationError("Personalization preference must be an object.");
+  const allowedKeys = new Set([
+    "themeId",
+    "customColors",
+    "accentColor",
+    "typography",
+    "appearance",
+    "accessibility",
+    "dashboard",
+    "presetId",
+    "updatedAt"
+  ]);
+  for (const key of Object.keys(data)) {
+    if (!allowedKeys.has(key)) throw new ValidationError(`Unsupported personalization field: ${key}.`);
+  }
+
+  const themePart = validateThemePreference({
+    themeId: data.themeId || "classic-light",
+    ...(data.customColors !== undefined ? { customColors: data.customColors } : {}),
+    ...(data.accentColor !== undefined ? { accentColor: data.accentColor } : {})
+  });
+
+  const typoRaw = data.typography === undefined ? {} : data.typography;
+  if (!isPlainObject(typoRaw)) throw new ValidationError("Typography settings must be an object.");
+  const headingFont = typeof typoRaw.headingFont === "string" ? typoRaw.headingFont.trim() : "default";
+  const bodyFont = typeof typoRaw.bodyFont === "string" ? typoRaw.bodyFont.trim() : "default";
+  const fontSize = typeof typoRaw.fontSize === "string" ? typoRaw.fontSize.trim() : "medium";
+  if (!VALID_FONT_IDS.has(headingFont) || !VALID_FONT_IDS.has(bodyFont)) {
+    throw new ValidationError("Choose a valid font family.");
+  }
+  if (!VALID_FONT_SIZES.has(fontSize)) {
+    throw new ValidationError("Choose a valid font size.");
+  }
+  const protectAcademicReadability = typoRaw.protectAcademicReadability === undefined
+    ? true
+    : Boolean(typoRaw.protectAcademicReadability);
+
+  const apRaw = data.appearance === undefined ? {} : data.appearance;
+  if (!isPlainObject(apRaw)) throw new ValidationError("Interface appearance settings must be an object.");
+  const buttonStyle = typeof apRaw.buttonStyle === "string" ? apRaw.buttonStyle.trim() : "rounded";
+  const spacing = typeof apRaw.spacing === "string" ? apRaw.spacing.trim() : "comfortable";
+  const cardStyle = typeof apRaw.cardStyle === "string" ? apRaw.cardStyle.trim() : "bordered";
+  const density = typeof apRaw.density === "string" ? apRaw.density.trim() : "balanced";
+  const motionMode = typeof apRaw.motionMode === "string" ? apRaw.motionMode.trim() : "smooth";
+  const sidebarStyle = typeof apRaw.sidebarStyle === "string" ? apRaw.sidebarStyle.trim() : "topbar";
+  const sidebarTone = typeof apRaw.sidebarTone === "string" ? apRaw.sidebarTone.trim() : "neutral";
+
+  if (!VALID_BUTTON_STYLES.has(buttonStyle)) throw new ValidationError("Invalid button style.");
+  if (!VALID_SPACINGS.has(spacing)) throw new ValidationError("Invalid interface spacing.");
+  if (!VALID_CARD_STYLES.has(cardStyle)) throw new ValidationError("Invalid card appearance style.");
+  if (!VALID_DENSITIES.has(density)) throw new ValidationError("Invalid interface density.");
+  if (!VALID_MOTION_MODES.has(motionMode)) throw new ValidationError("Invalid animation mode.");
+  if (!VALID_SIDEBAR_STYLES.has(sidebarStyle)) throw new ValidationError("Invalid navigation layout style.");
+  if (!VALID_SIDEBAR_TONES.has(sidebarTone)) throw new ValidationError("Invalid sidebar tone.");
+
+  const acRaw = data.accessibility === undefined ? {} : data.accessibility;
+  if (!isPlainObject(acRaw)) throw new ValidationError("Accessibility settings must be an object.");
+  const focusMode = typeof acRaw.focusMode === "string" ? acRaw.focusMode.trim() : "standard";
+  if (!VALID_FOCUS_MODES.has(focusMode)) throw new ValidationError("Invalid focus indicator mode.");
+
+  const dbRaw = data.dashboard === undefined ? {} : data.dashboard;
+  if (!isPlainObject(dbRaw)) throw new ValidationError("Dashboard customization settings must be an object.");
+  const greetingStyle = typeof dbRaw.greetingStyle === "string" ? dbRaw.greetingStyle.trim() : "time-based";
+  if (!VALID_GREETING_STYLES.has(greetingStyle)) throw new ValidationError("Invalid dashboard greeting style.");
+  const customGreeting = typeof dbRaw.customGreeting === "string" ? dbRaw.customGreeting.trim().slice(0, 80) : "";
+  const showGreetingName = dbRaw.showGreetingName === undefined ? true : Boolean(dbRaw.showGreetingName);
+  const sectionOrder = validateOrderArray(dbRaw.sectionOrder, DEFAULT_SECTION_ORDER, "sectionOrder");
+  const overviewOrder = validateOrderArray(dbRaw.overviewOrder, DEFAULT_OVERVIEW_ORDER, "overviewOrder");
+
+  const widgetsRaw = dbRaw.widgets === undefined ? {} : dbRaw.widgets;
+  if (!isPlainObject(widgetsRaw)) throw new ValidationError("Dashboard widgets must be an object.");
+  const validWidgetSet = new Set(DEFAULT_WIDGET_KEYS);
+  for (const wKey of Object.keys(widgetsRaw)) {
+    if (!validWidgetSet.has(wKey)) throw new ValidationError(`Unsupported dashboard widget: ${wKey}.`);
+  }
+  const widgets = {};
+  for (const wKey of DEFAULT_WIDGET_KEYS) {
+    widgets[wKey] = typeof widgetsRaw[wKey] === "boolean" ? widgetsRaw[wKey] : true;
+  }
+
+  const presetId = typeof data.presetId === "string" ? data.presetId.trim() : "";
+  if (!VALID_PRESET_IDS.has(presetId)) throw new ValidationError("Invalid personalization preset ID.");
+
+  return {
+    themeId: themePart.themeId,
+    ...(themePart.customColors ? { customColors: themePart.customColors } : {}),
+    ...(themePart.accentColor ? { accentColor: themePart.accentColor } : {}),
+    typography: {
+      headingFont,
+      bodyFont,
+      fontSize,
+      protectAcademicReadability
+    },
+    appearance: {
+      buttonStyle,
+      spacing,
+      cardStyle,
+      density,
+      motionMode,
+      sidebarStyle,
+      sidebarTone
+    },
+    accessibility: {
+      highContrast: Boolean(acRaw.highContrast),
+      reducedMotion: Boolean(acRaw.reducedMotion),
+      focusMode,
+      readableSpacing: Boolean(acRaw.readableSpacing)
+    },
+    dashboard: {
+      greetingStyle,
+      customGreeting,
+      showGreetingName,
+      sectionOrder,
+      overviewOrder,
+      widgets
+    },
+    presetId,
     updatedAt: Date.now()
   };
 }
@@ -553,6 +748,9 @@ function validateProfile(data) {
   };
   if (Object.prototype.hasOwnProperty.call(data, "themePreference") && data.themePreference !== undefined) {
     profile.themePreference = validateThemePreference(data.themePreference);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "personalization") && data.personalization !== undefined) {
+    profile.personalization = validatePersonalizationPreference(data.personalization);
   }
   return profile;
 }
@@ -1011,6 +1209,7 @@ module.exports = {
   validateFormula,
   validateProfile,
   validateThemePreference,
+  validatePersonalizationPreference,
   validateDirectoryItem,
   validateEvent,
   validateMarketplaceListing,

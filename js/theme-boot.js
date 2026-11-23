@@ -6,6 +6,10 @@
   var STORAGE_KEY_ACTIVE_UID = "afit_theme_active_uid";
   var STORAGE_KEY_ACTIVE_PREF = "afit_theme_active_pref";
   var STORAGE_KEY_USER_PREFIX = "afit_theme_uid_";
+  var STORAGE_KEY_PERSONALIZATION_ACTIVE = "afit_personalization_active_pref";
+  var STORAGE_KEY_PERSONALIZATION_USER_PREFIX = "afit_personalization_uid_";
+  var GOOGLE_FONTS_LINK_ID = "afit-google-fonts";
+  var GOOGLE_FONTS_URL = "https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Dancing+Script:wght@500;700&family=Great+Vibes&family=JetBrains+Mono:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&family=Playfair+Display:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap";
 
   var REQUIRED_CSS_VAR_NAMES = [
     "--bg-primary",
@@ -153,6 +157,29 @@
       msgReceivedBg: "#252932",
       msgReceivedText: "#f2f4f8",
       shadow: "0 14px 36px rgba(0, 0, 0, 0.45)"
+    },
+    "dark-amoled": {
+      label: "AMOLED Pure Black",
+      mode: "dark",
+      bgPrimary: "#000000",
+      bgSecondary: "#07080c",
+      bgTertiary: "#0e1017",
+      surface: "#0c0d12",
+      surfaceAlt: "#14161f",
+      surfaceElevated: "#1a1d29",
+      navBg: "rgba(5, 6, 9, 0.96)",
+      modalBg: "#11131b",
+      textPrimary: "#f5f7fc",
+      textSecondary: "#aab4c6",
+      textMuted: "#9aa5ba",
+      border: "#1f2330",
+      borderStrong: "#394159",
+      inputBg: "#06070a",
+      inputBorder: "#272c3d",
+      hoverBg: "#171a24",
+      msgReceivedBg: "#151822",
+      msgReceivedText: "#f5f7fc",
+      shadow: "0 14px 36px rgba(0, 0, 0, 0.72)"
     }
   };
 
@@ -741,6 +768,453 @@
     }
   ];
 
+  var EXTENDED_THEMES = [
+    {
+      id: "amoled-black",
+      name: "AMOLED Black",
+      mode: "dark",
+      category: "dark",
+      description: "True pitch-black canvas built for OLED screens and late-night zero-glare focus.",
+      swatches: ["#000000", "#0c0d12", "#2563eb", "#60a5fa", "#f5f7fc"],
+      tokens: {
+        bgPrimary: "#000000",
+        bgSecondary: "#07080c",
+        bgTertiary: "#0e1017",
+        surface: "#0c0d12",
+        surfaceAlt: "#14161f",
+        surfaceElevated: "#1a1d29",
+        navBg: "rgba(5, 6, 9, 0.96)",
+        modalBg: "#11131b",
+        textPrimary: "#f5f7fc",
+        textSecondary: "#aab4c6",
+        textMuted: "#9aa5ba",
+        accentPrimary: "#60a5fa",
+        accentPrimaryHover: "#93c5fd",
+        accentSecondary: "#38bdf8",
+        accentForeground: "#ffffff",
+        accentSoft: "#14223d",
+        buttonBg: "#2563eb",
+        buttonHover: "#1d4ed8",
+        buttonText: "#ffffff",
+        border: "#1f2330",
+        borderStrong: "#394159",
+        inputBg: "#06070a",
+        inputBorder: "#272c3d",
+        hoverBg: "#171a24",
+        navActiveBg: "#14223d",
+        navActiveText: "#93c5fd",
+        success: "#34d399",
+        successSoft: "#0e2922",
+        warning: "#fbbf24",
+        warningSoft: "#291f0e",
+        error: "#f87171",
+        errorSoft: "#2f1417",
+        msgReceivedBg: "#151822",
+        msgReceivedText: "#f5f7fc",
+        msgSentBg: "#2563eb",
+        msgSentText: "#ffffff",
+        focusRing: "rgba(96, 165, 250, 0.36)",
+        shadow: "0 14px 36px rgba(0, 0, 0, 0.72)"
+      }
+    },
+    {
+      id: "warm-cream",
+      name: "Warm Cream",
+      mode: "light",
+      category: "warm",
+      description: "Gentle parchment paper tones with sepia ink to ease eye strain during long reading.",
+      swatches: ["#faf4e8", "#fffdf8", "#92400e", "#b45309", "#2b2116"],
+      tokens: {
+        bgPrimary: "#faf4e8",
+        bgSecondary: "#f2e8d5",
+        bgTertiary: "#e7d9bf",
+        surface: "#fffdf8",
+        surfaceAlt: "#f6ede0",
+        surfaceElevated: "#fffefb",
+        navBg: "rgba(255, 253, 248, 0.95)",
+        modalBg: "#fffdf8",
+        textPrimary: "#2b2116",
+        textSecondary: "#5e4c38",
+        textMuted: "#6f5b44",
+        accentPrimary: "#92400e",
+        accentPrimaryHover: "#78350f",
+        accentSecondary: "#b45309",
+        accentForeground: "#ffffff",
+        accentSoft: "#f8ead3",
+        buttonBg: "#92400e",
+        buttonHover: "#78350f",
+        buttonText: "#ffffff",
+        border: "#e4d6be",
+        borderStrong: "#bfa985",
+        inputBg: "#fffdf9",
+        inputBorder: "#d6c5a9",
+        hoverBg: "#f4ead9",
+        navActiveBg: "#f8ead3",
+        navActiveText: "#7c360c",
+        success: "#1c6b48",
+        successSoft: "#e9f6ee",
+        warning: "#92400e",
+        warningSoft: "#faecd3",
+        error: "#ad3b32",
+        errorSoft: "#fff0ee",
+        msgReceivedBg: "#fffdf8",
+        msgReceivedText: "#2b2116",
+        msgSentBg: "#92400e",
+        msgSentText: "#ffffff",
+        focusRing: "rgba(146, 64, 14, 0.24)",
+        shadow: "0 12px 28px rgba(43, 33, 22, 0.08)"
+      }
+    },
+    {
+      id: "ocean-blue",
+      name: "Ocean Blue",
+      mode: "light",
+      category: "light",
+      description: "Deep maritime azure accents over cool coastal blues for crisp academic focus.",
+      swatches: ["#edf6fc", "#ffffff", "#0369a1", "#0284c7", "#0e2840"],
+      tokens: {
+        bgPrimary: "#edf6fc",
+        bgSecondary: "#dfeef8",
+        bgTertiary: "#cfe5f4",
+        surface: "#ffffff",
+        surfaceAlt: "#e9f4fb",
+        surfaceElevated: "#ffffff",
+        navBg: "rgba(248, 252, 255, 0.95)",
+        modalBg: "#ffffff",
+        textPrimary: "#0e2840",
+        textSecondary: "#3e5c76",
+        textMuted: "#4f6f8a",
+        accentPrimary: "#0369a1",
+        accentPrimaryHover: "#075985",
+        accentSecondary: "#0284c7",
+        accentForeground: "#ffffff",
+        accentSoft: "#e0f2fe",
+        buttonBg: "#0369a1",
+        buttonHover: "#075985",
+        buttonText: "#ffffff",
+        border: "#c8dfee",
+        borderStrong: "#8ab6d4",
+        inputBg: "#ffffff",
+        inputBorder: "#b0d0e6",
+        hoverBg: "#e6f3fb",
+        navActiveBg: "#e0f2fe",
+        navActiveText: "#0369a1",
+        success: "#0f766e",
+        successSoft: "#e6f7f5",
+        warning: "#9a5a08",
+        warningSoft: "#fff5e1",
+        error: "#b43f3f",
+        errorSoft: "#fff0f0",
+        msgReceivedBg: "#ffffff",
+        msgReceivedText: "#0e2840",
+        msgSentBg: "#0369a1",
+        msgSentText: "#ffffff",
+        focusRing: "rgba(3, 105, 161, 0.25)",
+        shadow: "0 12px 30px rgba(14, 40, 64, 0.08)"
+      }
+    },
+    {
+      id: "forest-green",
+      name: "Forest Green",
+      mode: "dark",
+      category: "dark",
+      description: "Deep pine woodland surfaces accented by luminous emerald mint for calm study sessions.",
+      swatches: ["#0a1711", "#13291f", "#059669", "#34d399", "#ebf7f0"],
+      tokens: {
+        bgPrimary: "#0a1711",
+        bgSecondary: "#10221a",
+        bgTertiary: "#163024",
+        surface: "#13291f",
+        surfaceAlt: "#1a3529",
+        surfaceElevated: "#214233",
+        navBg: "rgba(13, 30, 22, 0.95)",
+        modalBg: "#162e23",
+        textPrimary: "#ebf7f0",
+        textSecondary: "#9ec2ae",
+        textMuted: "#91b8a3",
+        accentPrimary: "#34d399",
+        accentPrimaryHover: "#6ee7b7",
+        accentSecondary: "#10b981",
+        accentForeground: "#062317",
+        accentSoft: "#143d2d",
+        buttonBg: "#047857",
+        buttonHover: "#065f46",
+        buttonText: "#ffffff",
+        border: "#244737",
+        borderStrong: "#386b54",
+        inputBg: "#0c1d15",
+        inputBorder: "#29523f",
+        hoverBg: "#1d3b2d",
+        navActiveBg: "#143d2d",
+        navActiveText: "#6ee7b7",
+        success: "#34d399",
+        successSoft: "#113628",
+        warning: "#fbbf24",
+        warningSoft: "#2d2410",
+        error: "#fb7185",
+        errorSoft: "#381822",
+        msgReceivedBg: "#193327",
+        msgReceivedText: "#ebf7f0",
+        msgSentBg: "#047857",
+        msgSentText: "#ffffff",
+        focusRing: "rgba(52, 211, 153, 0.32)",
+        shadow: "0 14px 36px rgba(0, 0, 0, 0.48)"
+      }
+    },
+    {
+      id: "lavender-mode",
+      name: "Lavender Mode",
+      mode: "light",
+      category: "vibrant",
+      description: "Airy lavender mist backgrounds paired with vivid amethyst highlights and clean legibility.",
+      swatches: ["#f3f0fc", "#ffffff", "#6d28d9", "#8b5cf6", "#201638"],
+      tokens: {
+        bgPrimary: "#f3f0fc",
+        bgSecondary: "#e9e2fa",
+        bgTertiary: "#ded4f7",
+        surface: "#ffffff",
+        surfaceAlt: "#f1ecfc",
+        surfaceElevated: "#ffffff",
+        navBg: "rgba(251, 249, 255, 0.95)",
+        modalBg: "#ffffff",
+        textPrimary: "#201638",
+        textSecondary: "#554875",
+        textMuted: "#665889",
+        accentPrimary: "#6d28d9",
+        accentPrimaryHover: "#5b21b6",
+        accentSecondary: "#7c3aed",
+        accentForeground: "#ffffff",
+        accentSoft: "#ede6fc",
+        buttonBg: "#6d28d9",
+        buttonHover: "#5b21b6",
+        buttonText: "#ffffff",
+        border: "#ddd3f5",
+        borderStrong: "#b6a3e3",
+        inputBg: "#ffffff",
+        inputBorder: "#c9bbea",
+        hoverBg: "#f0ebfc",
+        navActiveBg: "#ede6fc",
+        navActiveText: "#5b21b6",
+        success: "#1b6f4e",
+        successSoft: "#e9f8ef",
+        warning: "#945a0a",
+        warningSoft: "#fff5e1",
+        error: "#b4414b",
+        errorSoft: "#fff0f2",
+        msgReceivedBg: "#ffffff",
+        msgReceivedText: "#201638",
+        msgSentBg: "#6d28d9",
+        msgSentText: "#ffffff",
+        focusRing: "rgba(109, 40, 217, 0.25)",
+        shadow: "0 12px 30px rgba(45, 27, 89, 0.08)"
+      }
+    }
+  ];
+
+  var ALL_THEMES = THEMES.concat(EXTENDED_THEMES);
+
+  var ACCENT_PRESETS = [
+    { id: "navy", label: "Academic Navy", hex: "#174e74" },
+    { id: "ocean", label: "Ocean Blue", hex: "#0369a1" },
+    { id: "indigo", label: "Indigo", hex: "#4f46e5" },
+    { id: "violet", label: "Violet", hex: "#7c3aed" },
+    { id: "teal", label: "Botanical Teal", hex: "#0f766e" },
+    { id: "rose", label: "Rose Berry", hex: "#b42c5c" },
+    { id: "amber", label: "Warm Bronze", hex: "#b45309" },
+    { id: "slate", label: "Graphite Ink", hex: "#1e293b" }
+  ];
+
+  var FONT_CATALOG = [
+    {
+      id: "default",
+      name: "Default (Plus Jakarta Sans)",
+      category: "Modern & Clean",
+      stack: '"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif',
+      decorative: false,
+      googleFont: true,
+      specimen: "Clear academic hierarchy, notes & GPA summaries — 12345"
+    },
+    {
+      id: "modern-sans",
+      name: "Modern Sans Serif (Poppins)",
+      category: "Geometric Sans",
+      stack: '"Poppins", "Segoe UI", Arial, sans-serif',
+      decorative: false,
+      googleFont: true,
+      specimen: "Balanced geometric precision for modern workspaces — 12345"
+    },
+    {
+      id: "roboto-sans",
+      name: "Crisp Sans (Roboto)",
+      category: "Neutral Sans",
+      stack: '"Roboto", "Segoe UI", Arial, sans-serif',
+      decorative: false,
+      googleFont: true,
+      specimen: "Dependable clarity across dense tables and schedules — 12345"
+    },
+    {
+      id: "rounded",
+      name: "Rounded (Nunito)",
+      category: "Friendly Rounded",
+      stack: '"Nunito", "Segoe UI", Arial, sans-serif',
+      decorative: false,
+      googleFont: true,
+      specimen: "Warm rounded terminals for calm everyday study — 12345"
+    },
+    {
+      id: "classic-serif",
+      name: "Classic Serif (Playfair Display)",
+      category: "Editorial Serif",
+      stack: '"Playfair Display", Georgia, serif',
+      decorative: false,
+      googleFont: true,
+      specimen: "Scholarly editorial headings with timeless contrast — 12345"
+    },
+    {
+      id: "handwriting",
+      name: "Handwriting (Caveat)",
+      category: "Handwritten",
+      stack: '"Caveat", cursive',
+      decorative: true,
+      googleFont: true,
+      specimen: "Casual handwritten notebook lettering for personal headings"
+    },
+    {
+      id: "cursive-script",
+      name: "Flowing Cursive (Dancing Script)",
+      category: "Cursive Handwriting",
+      stack: '"Dancing Script", cursive',
+      decorative: true,
+      googleFont: true,
+      specimen: "Expressive cursive rhythm for greetings & titles"
+    },
+    {
+      id: "decorative",
+      name: "Decorative Handwriting (Pacifico)",
+      category: "Decorative Script",
+      stack: '"Pacifico", cursive',
+      decorative: true,
+      googleFont: true,
+      specimen: "Bold brushed signature lettering with character"
+    },
+    {
+      id: "elegant-script",
+      name: "Elegant Script (Great Vibes)",
+      category: "Calligraphic Script",
+      stack: '"Great Vibes", cursive',
+      decorative: true,
+      googleFont: true,
+      specimen: "Refined calligraphic script for display banners"
+    },
+    {
+      id: "monospace",
+      name: "Monospace (JetBrains Mono)",
+      category: "Technical Monospace",
+      stack: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+      decorative: false,
+      googleFont: true,
+      specimen: "CSC 201 · GPA 4.85 · Lab 12:30–14:00"
+    }
+  ];
+
+  var FONT_SIZE_SCALES = {
+    small: { id: "small", label: "Small", px: "14px", scale: "0.9" },
+    medium: { id: "medium", label: "Medium", px: "16px", scale: "1" },
+    large: { id: "large", label: "Large", px: "17.5px", scale: "1.09" },
+    xlarge: { id: "xlarge", label: "Extra Large", px: "19px", scale: "1.18" }
+  };
+
+  var VALID_BUTTON_STYLES = { rounded: "10px", "soft-square": "5px", pill: "999px" };
+  var VALID_SPACINGS = ["compact", "comfortable", "spacious"];
+  var VALID_CARD_STYLES = ["bordered", "elevated", "tinted"];
+  var VALID_DENSITIES = ["compact", "balanced", "relaxed"];
+  var VALID_MOTION_MODES = ["smooth", "reduced"];
+  var VALID_SIDEBAR_STYLES = ["topbar", "compact", "sidebar"];
+  var VALID_SIDEBAR_TONES = ["neutral", "tinted", "accent"];
+  var VALID_FOCUS_MODES = ["standard", "enhanced"];
+  var VALID_GREETING_STYLES = ["time-based", "welcome", "focused", "academic", "custom"];
+  var DEFAULT_SECTION_ORDER = ["quickActions", "overview", "platformHub", "lowerPanels"];
+  var DEFAULT_OVERVIEW_ORDER = ["todayClasses", "currentCourses", "upcomingAssignments", "examCountdown"];
+  var DEFAULT_WIDGETS = {
+    quickActions: true,
+    stats: true,
+    todayClasses: true,
+    currentCourses: true,
+    upcomingAssignments: true,
+    examCountdown: true,
+    platformHub: true,
+    quickNav: true,
+    gradingNote: true
+  };
+
+  var PERSONALIZATION_PRESETS = [
+    {
+      id: "minimalist",
+      name: "Minimalist",
+      summary: "Crisp light canvas, default sans type, soft-square controls, compact calm spacing, and reduced animations.",
+      patch: {
+        themeId: "classic-light",
+        customColors: null,
+        accentColor: "#1e293b",
+        typography: { headingFont: "default", bodyFont: "default", fontSize: "medium", protectAcademicReadability: true },
+        appearance: { buttonStyle: "soft-square", spacing: "compact", cardStyle: "bordered", density: "compact", motionMode: "reduced", sidebarStyle: "topbar", sidebarTone: "neutral" },
+        accessibility: { highContrast: false, reducedMotion: true, focusMode: "standard", readableSpacing: false }
+      }
+    },
+    {
+      id: "student-focus",
+      name: "Student Focus",
+      summary: "Ocean blue clarity, Poppins + clean sans typography, desktop sidebar rail, and enhanced focus indicators.",
+      patch: {
+        themeId: "ocean-blue",
+        customColors: null,
+        accentColor: "#0369a1",
+        typography: { headingFont: "modern-sans", bodyFont: "default", fontSize: "medium", protectAcademicReadability: true },
+        appearance: { buttonStyle: "rounded", spacing: "comfortable", cardStyle: "bordered", density: "balanced", motionMode: "smooth", sidebarStyle: "sidebar", sidebarTone: "tinted" },
+        accessibility: { highContrast: false, reducedMotion: false, focusMode: "enhanced", readableSpacing: true }
+      }
+    },
+    {
+      id: "creative",
+      name: "Creative",
+      summary: "Lavender Mode palette, expressive serif headings paired with rounded Nunito body text, pill buttons, and spacious layout.",
+      patch: {
+        themeId: "lavender-mode",
+        customColors: null,
+        accentColor: "#b42c5c",
+        typography: { headingFont: "classic-serif", bodyFont: "rounded", fontSize: "medium", protectAcademicReadability: true },
+        appearance: { buttonStyle: "pill", spacing: "spacious", cardStyle: "tinted", density: "relaxed", motionMode: "smooth", sidebarStyle: "topbar", sidebarTone: "accent" },
+        accessibility: { highContrast: false, reducedMotion: false, focusMode: "standard", readableSpacing: false }
+      }
+    },
+    {
+      id: "elegant",
+      name: "Elegant",
+      summary: "Warm Cream parchment surfaces, Playfair Display headings, elevated cards, and gentle comfortable spacing.",
+      patch: {
+        themeId: "warm-cream",
+        customColors: null,
+        accentColor: "#92400e",
+        typography: { headingFont: "classic-serif", bodyFont: "default", fontSize: "large", protectAcademicReadability: true },
+        appearance: { buttonStyle: "rounded", spacing: "spacious", cardStyle: "elevated", density: "balanced", motionMode: "smooth", sidebarStyle: "topbar", sidebarTone: "neutral" },
+        accessibility: { highContrast: false, reducedMotion: false, focusMode: "standard", readableSpacing: true }
+      }
+    },
+    {
+      id: "night-owl",
+      name: "Night Owl",
+      summary: "AMOLED Pure Black canvas, soft violet highlights, readable spacing, and glare-free late-night comfort.",
+      patch: {
+        themeId: "amoled-black",
+        customColors: null,
+        accentColor: "#a78bfa",
+        typography: { headingFont: "modern-sans", bodyFont: "roboto-sans", fontSize: "medium", protectAcademicReadability: true },
+        appearance: { buttonStyle: "rounded", spacing: "comfortable", cardStyle: "bordered", density: "balanced", motionMode: "reduced", sidebarStyle: "sidebar", sidebarTone: "neutral" },
+        accessibility: { highContrast: false, reducedMotion: true, focusMode: "enhanced", readableSpacing: true }
+      }
+    }
+  ];
+
   function isValidHexColor(value) {
     return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value.trim());
   }
@@ -903,13 +1377,65 @@
   }
 
   function findStaticTheme(themeId) {
-    for (var i = 0; i < THEMES.length; i += 1) {
-      if (THEMES[i].id === themeId) return THEMES[i];
+    for (var i = 0; i < ALL_THEMES.length; i += 1) {
+      if (ALL_THEMES[i].id === themeId) return ALL_THEMES[i];
     }
     return THEMES[0];
   }
 
-  function getThemeById(themeId, customColors, systemDarkOverride) {
+  function resolveThemeWithAccent(theme, accentHex) {
+    if (!theme || theme.id === "custom" || !isValidHexColor(accentHex)) {
+      return theme;
+    }
+    var rawAccent = accentHex.trim().toLowerCase();
+    var tk = theme.tokens;
+    var isDark = theme.mode === "dark";
+    var readableAccent = ensureReadableAccentOnSurface(rawAccent, tk.surface, 4.5);
+    var buttonBg = rawAccent;
+    var buttonText = pickReadableForeground(buttonBg);
+    if (contrastRatio(buttonBg, buttonText) < 4.5) {
+      buttonBg = ensureReadableAccentOnSurface(rawAccent, buttonText, 4.5);
+      buttonText = pickReadableForeground(buttonBg);
+    }
+    var accentHover = mixHex(readableAccent, isDark ? "#ffffff" : "#000000", 0.16);
+    var buttonHover = mixHex(buttonBg, isDark ? "#ffffff" : "#000000", 0.16);
+    var accentSoft = mixHex(tk.surface, rawAccent, isDark ? 0.25 : 0.12);
+    var rgb = hexToRgb(readableAccent) || { r: 23, g: 78, b: 116 };
+
+    var nextTokens = {};
+    for (var k in tk) {
+      if (Object.prototype.hasOwnProperty.call(tk, k)) {
+        nextTokens[k] = tk[k];
+      }
+    }
+    nextTokens.accentPrimary = readableAccent;
+    nextTokens.accentPrimaryHover = accentHover;
+    nextTokens.accentForeground = pickReadableForeground(readableAccent);
+    nextTokens.accentSoft = accentSoft;
+    nextTokens.buttonBg = buttonBg;
+    nextTokens.buttonHover = buttonHover;
+    nextTokens.buttonText = buttonText;
+    nextTokens.navActiveBg = accentSoft;
+    nextTokens.navActiveText = readableAccent;
+    nextTokens.msgSentBg = buttonBg;
+    nextTokens.msgSentText = buttonText;
+    nextTokens.focusRing = "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", 0.28)";
+
+    return {
+      id: theme.id,
+      resolvedThemeId: theme.resolvedThemeId,
+      isSystemDefault: theme.isSystemDefault,
+      name: theme.name,
+      mode: theme.mode,
+      category: theme.category,
+      description: theme.description,
+      swatches: theme.swatches,
+      accentOverride: rawAccent,
+      tokens: nextTokens
+    };
+  }
+
+  function getThemeById(themeId, customColors, systemDarkOverride, accentColor) {
     if (themeId === "custom") {
       return resolveCustomThemeDefinition(customColors);
     }
@@ -918,7 +1444,7 @@
         ? systemDarkOverride
         : detectSystemDarkMode();
       var baseTheme = findStaticTheme(prefersDark ? "midnight-dark" : "classic-light");
-      return {
+      var systemResolved = {
         id: SYSTEM_THEME_ID,
         resolvedThemeId: baseTheme.id,
         isSystemDefault: true,
@@ -929,15 +1455,16 @@
         swatches: baseTheme.swatches,
         tokens: baseTheme.tokens
       };
+      return resolveThemeWithAccent(systemResolved, accentColor);
     }
-    return findStaticTheme(themeId);
+    return resolveThemeWithAccent(findStaticTheme(themeId), accentColor);
   }
 
   function normalizePreference(raw) {
     if (!raw || typeof raw !== "object") {
-      return { themeId: DEFAULT_THEME_ID, customColors: null, updatedAt: 0, pendingSync: false };
+      return { themeId: DEFAULT_THEME_ID, customColors: null, accentColor: null, updatedAt: 0, pendingSync: false };
     }
-    var validStatic = THEMES.some(function (t) { return t.id === raw.themeId; });
+    var validStatic = ALL_THEMES.some(function (t) { return t.id === raw.themeId; });
     var id = (raw.themeId === "custom" || raw.themeId === SYSTEM_THEME_ID || validStatic)
       ? raw.themeId
       : DEFAULT_THEME_ID;
@@ -953,12 +1480,159 @@
         buttonAccent: isValidHexColor(raw.customColors.buttonAccent) ? raw.customColors.buttonAccent.toLowerCase() : "#174e74"
       };
     }
+    var accentColor = isValidHexColor(raw.accentColor) ? raw.accentColor.trim().toLowerCase() : null;
     return {
       themeId: id,
       customColors: id === "custom" ? customColors : null,
+      accentColor: id === "custom" ? null : accentColor,
       updatedAt: Number(raw.updatedAt) || 0,
       pendingSync: Boolean(raw.pendingSync)
     };
+  }
+
+  function findFontDef(fontId) {
+    for (var i = 0; i < FONT_CATALOG.length; i += 1) {
+      if (FONT_CATALOG[i].id === fontId) return FONT_CATALOG[i];
+    }
+    return FONT_CATALOG[0];
+  }
+
+  function normalizeOrderList(rawList, defaultList) {
+    if (!Array.isArray(rawList)) return defaultList.slice();
+    var validSet = {};
+    for (var i = 0; i < defaultList.length; i += 1) validSet[defaultList[i]] = true;
+    var seen = {};
+    var clean = [];
+    for (var j = 0; j < rawList.length; j += 1) {
+      var key = rawList[j];
+      if (validSet[key] && !seen[key]) {
+        seen[key] = true;
+        clean.push(key);
+      }
+    }
+    for (var k = 0; k < defaultList.length; k += 1) {
+      if (!seen[defaultList[k]]) clean.push(defaultList[k]);
+    }
+    return clean;
+  }
+
+  function getDefaultPersonalization() {
+    var widgetsCopy = {};
+    for (var k in DEFAULT_WIDGETS) {
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_WIDGETS, k)) {
+        widgetsCopy[k] = DEFAULT_WIDGETS[k];
+      }
+    }
+    return {
+      themeId: DEFAULT_THEME_ID,
+      customColors: null,
+      accentColor: null,
+      typography: {
+        headingFont: "default",
+        bodyFont: "default",
+        fontSize: "medium",
+        protectAcademicReadability: true
+      },
+      appearance: {
+        buttonStyle: "rounded",
+        spacing: "comfortable",
+        cardStyle: "bordered",
+        density: "balanced",
+        motionMode: "smooth",
+        sidebarStyle: "topbar",
+        sidebarTone: "neutral"
+      },
+      accessibility: {
+        highContrast: false,
+        reducedMotion: false,
+        focusMode: "standard",
+        readableSpacing: false
+      },
+      dashboard: {
+        greetingStyle: "time-based",
+        customGreeting: "",
+        showGreetingName: true,
+        sectionOrder: DEFAULT_SECTION_ORDER.slice(),
+        overviewOrder: DEFAULT_OVERVIEW_ORDER.slice(),
+        widgets: widgetsCopy
+      },
+      presetId: "",
+      updatedAt: 0,
+      pendingSync: false
+    };
+  }
+
+  function normalizePersonalization(raw) {
+    var base = getDefaultPersonalization();
+    if (!raw || typeof raw !== "object") return base;
+    var themeNorm = normalizePreference(raw);
+    base.themeId = themeNorm.themeId;
+    base.customColors = themeNorm.customColors;
+    base.accentColor = themeNorm.accentColor;
+    base.updatedAt = themeNorm.updatedAt;
+    base.pendingSync = themeNorm.pendingSync;
+
+    if (raw.typography && typeof raw.typography === "object") {
+      var hf = findFontDef(raw.typography.headingFont).id;
+      var bf = findFontDef(raw.typography.bodyFont).id;
+      var fs = FONT_SIZE_SCALES[raw.typography.fontSize] ? raw.typography.fontSize : "medium";
+      base.typography = {
+        headingFont: hf,
+        bodyFont: bf,
+        fontSize: fs,
+        protectAcademicReadability: raw.typography.protectAcademicReadability !== false
+      };
+    }
+
+    if (raw.appearance && typeof raw.appearance === "object") {
+      var ap = raw.appearance;
+      base.appearance = {
+        buttonStyle: VALID_BUTTON_STYLES[ap.buttonStyle] ? ap.buttonStyle : "rounded",
+        spacing: VALID_SPACINGS.indexOf(ap.spacing) >= 0 ? ap.spacing : "comfortable",
+        cardStyle: VALID_CARD_STYLES.indexOf(ap.cardStyle) >= 0 ? ap.cardStyle : "bordered",
+        density: VALID_DENSITIES.indexOf(ap.density) >= 0 ? ap.density : "balanced",
+        motionMode: VALID_MOTION_MODES.indexOf(ap.motionMode) >= 0 ? ap.motionMode : "smooth",
+        sidebarStyle: VALID_SIDEBAR_STYLES.indexOf(ap.sidebarStyle) >= 0 ? ap.sidebarStyle : "topbar",
+        sidebarTone: VALID_SIDEBAR_TONES.indexOf(ap.sidebarTone) >= 0 ? ap.sidebarTone : "neutral"
+      };
+    }
+
+    if (raw.accessibility && typeof raw.accessibility === "object") {
+      var ac = raw.accessibility;
+      base.accessibility = {
+        highContrast: Boolean(ac.highContrast),
+        reducedMotion: Boolean(ac.reducedMotion),
+        focusMode: VALID_FOCUS_MODES.indexOf(ac.focusMode) >= 0 ? ac.focusMode : "standard",
+        readableSpacing: Boolean(ac.readableSpacing)
+      };
+    }
+
+    if (raw.dashboard && typeof raw.dashboard === "object") {
+      var db = raw.dashboard;
+      var widgets = {};
+      for (var wk in DEFAULT_WIDGETS) {
+        if (Object.prototype.hasOwnProperty.call(DEFAULT_WIDGETS, wk)) {
+          widgets[wk] = db.widgets && typeof db.widgets === "object" && typeof db.widgets[wk] === "boolean"
+            ? db.widgets[wk]
+            : DEFAULT_WIDGETS[wk];
+        }
+      }
+      base.dashboard = {
+        greetingStyle: VALID_GREETING_STYLES.indexOf(db.greetingStyle) >= 0 ? db.greetingStyle : "time-based",
+        customGreeting: typeof db.customGreeting === "string" ? db.customGreeting.trim().slice(0, 80) : "",
+        showGreetingName: db.showGreetingName !== false,
+        sectionOrder: normalizeOrderList(db.sectionOrder, DEFAULT_SECTION_ORDER),
+        overviewOrder: normalizeOrderList(db.overviewOrder, DEFAULT_OVERVIEW_ORDER),
+        widgets: widgets
+      };
+    }
+
+    if (typeof raw.presetId === "string") {
+      var knownPreset = PERSONALIZATION_PRESETS.some(function (p) { return p.id === raw.presetId; });
+      base.presetId = knownPreset ? raw.presetId : "";
+    }
+
+    return base;
   }
 
   function buildCssVariableMap(theme) {
@@ -1066,9 +1740,28 @@
     };
   }
 
-  var activeAppliedPreference = { themeId: DEFAULT_THEME_ID, customColors: null, updatedAt: 0 };
+  var activeAppliedPreference = { themeId: DEFAULT_THEME_ID, customColors: null, accentColor: null, updatedAt: 0 };
+  var activeAppliedPersonalization = getDefaultPersonalization();
   var mediaQueryList = null;
   var mediaQueryListener = null;
+
+  function ensureGoogleFontsLoaded(forceAll) {
+    if (typeof document === "undefined" || !document.head) return;
+    if (document.getElementById(GOOGLE_FONTS_LINK_ID)) return;
+    if (!forceAll) {
+      var typo = activeAppliedPersonalization && activeAppliedPersonalization.typography;
+      if (!typo) return;
+      var usesCustomFont = typo.headingFont !== "default" || typo.bodyFont !== "default";
+      if (!usesCustomFont) return;
+    }
+    try {
+      var link = document.createElement("link");
+      link.id = GOOGLE_FONTS_LINK_ID;
+      link.rel = "stylesheet";
+      link.href = GOOGLE_FONTS_URL;
+      document.head.appendChild(link);
+    } catch (_) {}
+  }
 
   function updateSystemMediaSubscription(shouldListen) {
     if (typeof root.matchMedia !== "function") return;
@@ -1088,7 +1781,7 @@
     if (!mediaQueryListener) {
       mediaQueryListener = function () {
         if (activeAppliedPreference && activeAppliedPreference.themeId === SYSTEM_THEME_ID) {
-          applyTheme(activeAppliedPreference, { animate: true });
+          applyPersonalization(activeAppliedPersonalization, { animate: true });
         }
       };
       if (typeof mediaQueryList.addEventListener === "function") {
@@ -1099,13 +1792,13 @@
     }
   }
 
-  function applyTheme(preference, options) {
+  function applyThemeTokensOnly(preference, options) {
     var opts = options || {};
     var normalized = normalizePreference(preference);
     activeAppliedPreference = normalized;
     updateSystemMediaSubscription(normalized.themeId === SYSTEM_THEME_ID);
 
-    var theme = getThemeById(normalized.themeId, normalized.customColors, opts.systemDarkOverride);
+    var theme = getThemeById(normalized.themeId, normalized.customColors, opts.systemDarkOverride, normalized.accentColor);
     var resolvedDataTheme = theme.resolvedThemeId || theme.id;
     var vars = buildCssVariableMap(theme);
 
@@ -1134,15 +1827,88 @@
       if (metaTheme) {
         metaTheme.setAttribute("content", theme.tokens.bgPrimary);
       }
+    }
+
+    return { preference: normalized, theme: theme, vars: vars };
+  }
+
+  function applyPersonalization(personalizationInput, options) {
+    var opts = options || {};
+    var normalized = normalizePersonalization(personalizationInput);
+    activeAppliedPersonalization = normalized;
+
+    var themeResult = applyThemeTokensOnly(normalized, opts);
+    var headingDef = findFontDef(normalized.typography.headingFont);
+    var bodyDef = findFontDef(normalized.typography.bodyFont);
+    var sizeDef = FONT_SIZE_SCALES[normalized.typography.fontSize] || FONT_SIZE_SCALES.medium;
+    var ap = normalized.appearance;
+    var ac = normalized.accessibility;
+    var effectiveReducedMotion = Boolean(ac.reducedMotion || ap.motionMode === "reduced");
+
+    if (typeof document !== "undefined" && document.documentElement) {
+      var docEl = document.documentElement;
+      docEl.style.setProperty("--font-heading", headingDef.stack);
+      docEl.style.setProperty("--font-body", bodyDef.stack);
+      docEl.style.setProperty("--font-academic-safe", '"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif');
+      docEl.style.setProperty("--font-scale", sizeDef.scale);
+      docEl.style.setProperty("--font-size-base", sizeDef.px);
+      docEl.style.setProperty("--ui-button-radius", VALID_BUTTON_STYLES[ap.buttonStyle] || "10px");
+
+      docEl.dataset.fontHeading = headingDef.id;
+      docEl.dataset.fontBody = bodyDef.id;
+      docEl.dataset.fontSize = sizeDef.id;
+      docEl.dataset.decorativeBody = bodyDef.decorative ? "true" : "false";
+      docEl.dataset.readabilityGuard = normalized.typography.protectAcademicReadability ? "true" : "false";
+      docEl.dataset.buttonStyle = ap.buttonStyle;
+      docEl.dataset.uiSpacing = ap.spacing;
+      docEl.dataset.cardStyle = ap.cardStyle;
+      docEl.dataset.uiDensity = ap.density;
+      docEl.dataset.motionMode = effectiveReducedMotion ? "reduced" : "smooth";
+      docEl.dataset.navLayout = ap.sidebarStyle;
+      docEl.dataset.sidebarTone = ap.sidebarTone;
+      docEl.dataset.highContrast = ac.highContrast ? "true" : "false";
+      docEl.dataset.reducedMotion = effectiveReducedMotion ? "true" : "false";
+      docEl.dataset.focusRing = ac.focusMode;
+      docEl.dataset.readableSpacing = ac.readableSpacing ? "true" : "false";
+
+      ensureGoogleFontsLoaded(opts.preloadAllFonts);
 
       if (typeof CustomEvent === "function") {
         document.dispatchEvent(new CustomEvent("afit-theme-changed", {
-          detail: { preference: normalized, theme: theme, vars: vars }
+          detail: { preference: themeResult.preference, theme: themeResult.theme, vars: themeResult.vars }
+        }));
+        document.dispatchEvent(new CustomEvent("afit-personalization-changed", {
+          detail: { personalization: normalized, theme: themeResult.theme, vars: themeResult.vars }
         }));
       }
     }
 
-    return { preference: normalized, theme: theme, vars: vars };
+    return {
+      personalization: normalized,
+      preference: themeResult.preference,
+      theme: themeResult.theme,
+      vars: themeResult.vars
+    };
+  }
+
+  function applyTheme(preference, options) {
+    if (preference && typeof preference === "object" && (preference.typography || preference.appearance || preference.accessibility || preference.dashboard)) {
+      return applyPersonalization(preference, options);
+    }
+    var merged = normalizePersonalization(activeAppliedPersonalization);
+    var normTheme = normalizePreference(preference);
+    merged.themeId = normTheme.themeId;
+    merged.customColors = normTheme.customColors;
+    merged.accentColor = normTheme.accentColor;
+    activeAppliedPersonalization = merged;
+
+    var res = applyThemeTokensOnly(normTheme, options);
+    if (typeof document !== "undefined" && typeof CustomEvent === "function") {
+      document.dispatchEvent(new CustomEvent("afit-theme-changed", {
+        detail: { preference: res.preference, theme: res.theme, vars: res.vars }
+      }));
+    }
+    return res;
   }
 
   function safeStorageGet(key) {
@@ -1187,29 +1953,62 @@
     return normalized;
   }
 
+  function readStoredPersonalizationForUid(uid) {
+    if (!uid) return null;
+    var raw = safeStorageGet(STORAGE_KEY_PERSONALIZATION_USER_PREFIX + uid);
+    if (raw) {
+      try {
+        return normalizePersonalization(JSON.parse(raw));
+      } catch (_) {}
+    }
+    var legacyTheme = readStoredPreferenceForUid(uid);
+    return legacyTheme ? normalizePersonalization(legacyTheme) : null;
+  }
+
+  function saveStoredPersonalizationForUid(uid, pref) {
+    var normalized = normalizePersonalization(pref);
+    normalized.updatedAt = normalized.updatedAt || Date.now();
+    if (uid) {
+      safeStorageSet(STORAGE_KEY_PERSONALIZATION_USER_PREFIX + uid, JSON.stringify(normalized));
+      safeStorageSet(STORAGE_KEY_ACTIVE_UID, uid);
+    }
+    safeStorageSet(STORAGE_KEY_PERSONALIZATION_ACTIVE, JSON.stringify(normalized));
+    saveStoredPreferenceForUid(uid, {
+      themeId: normalized.themeId,
+      customColors: normalized.customColors,
+      accentColor: normalized.accentColor,
+      updatedAt: normalized.updatedAt,
+      pendingSync: normalized.pendingSync
+    });
+    return normalized;
+  }
+
   function clearActiveSessionTheme() {
     safeStorageRemove(STORAGE_KEY_ACTIVE_UID);
     safeStorageRemove(STORAGE_KEY_ACTIVE_PREF);
-    applyTheme({ themeId: DEFAULT_THEME_ID }, { animate: false });
+    safeStorageRemove(STORAGE_KEY_PERSONALIZATION_ACTIVE);
+    applyPersonalization(getDefaultPersonalization(), { animate: false });
   }
 
   function bootInitialTheme() {
     var activeUid = safeStorageGet(STORAGE_KEY_ACTIVE_UID);
-    var pref = null;
+    var pers = null;
     if (activeUid) {
-      pref = readStoredPreferenceForUid(activeUid);
+      pers = readStoredPersonalizationForUid(activeUid);
     }
-    if (!pref) {
-      var raw = safeStorageGet(STORAGE_KEY_ACTIVE_PREF);
-      if (raw) {
-        try {
-          pref = normalizePreference(JSON.parse(raw));
-        } catch (_) {
-          pref = null;
-        }
+    if (!pers) {
+      var rawPers = safeStorageGet(STORAGE_KEY_PERSONALIZATION_ACTIVE);
+      if (rawPers) {
+        try { pers = normalizePersonalization(JSON.parse(rawPers)); } catch (_) { pers = null; }
       }
     }
-    applyTheme(pref || { themeId: DEFAULT_THEME_ID }, { animate: false });
+    if (!pers) {
+      var rawLegacy = safeStorageGet(STORAGE_KEY_ACTIVE_PREF);
+      if (rawLegacy) {
+        try { pers = normalizePersonalization(JSON.parse(rawLegacy)); } catch (_) { pers = null; }
+      }
+    }
+    applyPersonalization(pers || getDefaultPersonalization(), { animate: false });
   }
 
   var api = {
@@ -1218,18 +2017,34 @@
     REQUIRED_CSS_VAR_NAMES: REQUIRED_CSS_VAR_NAMES,
     BACKGROUND_PRESETS: BACKGROUND_PRESETS,
     THEMES: THEMES,
+    EXTENDED_THEMES: EXTENDED_THEMES,
+    ALL_THEMES: ALL_THEMES,
+    ACCENT_PRESETS: ACCENT_PRESETS,
+    FONT_CATALOG: FONT_CATALOG,
+    FONT_SIZE_SCALES: FONT_SIZE_SCALES,
+    PERSONALIZATION_PRESETS: PERSONALIZATION_PRESETS,
+    DEFAULT_SECTION_ORDER: DEFAULT_SECTION_ORDER,
+    DEFAULT_OVERVIEW_ORDER: DEFAULT_OVERVIEW_ORDER,
+    DEFAULT_WIDGETS: DEFAULT_WIDGETS,
     detectSystemDarkMode: detectSystemDarkMode,
     isValidHexColor: isValidHexColor,
     contrastRatio: contrastRatio,
     pickReadableForeground: pickReadableForeground,
     ensureReadableAccentOnSurface: ensureReadableAccentOnSurface,
     resolveCustomThemeDefinition: resolveCustomThemeDefinition,
+    resolveThemeWithAccent: resolveThemeWithAccent,
     getThemeById: getThemeById,
     normalizePreference: normalizePreference,
+    getDefaultPersonalization: getDefaultPersonalization,
+    normalizePersonalization: normalizePersonalization,
     buildCssVariableMap: buildCssVariableMap,
     applyTheme: applyTheme,
+    applyPersonalization: applyPersonalization,
+    ensureGoogleFontsLoaded: ensureGoogleFontsLoaded,
     readStoredPreferenceForUid: readStoredPreferenceForUid,
     saveStoredPreferenceForUid: saveStoredPreferenceForUid,
+    readStoredPersonalizationForUid: readStoredPersonalizationForUid,
+    saveStoredPersonalizationForUid: saveStoredPersonalizationForUid,
     clearActiveSessionTheme: clearActiveSessionTheme,
     getActiveUid: function () { return safeStorageGet(STORAGE_KEY_ACTIVE_UID) || ""; },
     getCurrentPreference: function () {
@@ -1242,7 +2057,19 @@
       if (raw) {
         try { return normalizePreference(JSON.parse(raw)); } catch (_) {}
       }
-      return { themeId: DEFAULT_THEME_ID, customColors: null, updatedAt: 0, pendingSync: false };
+      return { themeId: DEFAULT_THEME_ID, customColors: null, accentColor: null, updatedAt: 0, pendingSync: false };
+    },
+    getCurrentPersonalization: function () {
+      var uid = safeStorageGet(STORAGE_KEY_ACTIVE_UID);
+      if (uid) {
+        var uidPers = readStoredPersonalizationForUid(uid);
+        if (uidPers) return uidPers;
+      }
+      var raw = safeStorageGet(STORAGE_KEY_PERSONALIZATION_ACTIVE);
+      if (raw) {
+        try { return normalizePersonalization(JSON.parse(raw)); } catch (_) {}
+      }
+      return getDefaultPersonalization();
     }
   };
 

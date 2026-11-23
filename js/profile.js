@@ -66,7 +66,8 @@ export async function renderProfileModule(container, options = {}) {
     name: profileData.name,
     isAdmin: Boolean(data.isAdmin),
     profile: { ...profileData },
-    themePreference: data.profile?.themePreference || null
+    themePreference: data.profile?.themePreference || null,
+    personalization: data.profile?.personalization || null
   };
 
   if (typeof onProfileLoaded === "function") {

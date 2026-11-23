@@ -22,6 +22,7 @@ const {
   validateFormula,
   validateProfile,
   validateThemePreference,
+  validatePersonalizationPreference,
   validateDirectoryItem,
   validateEvent,
   validateMarketplaceListing,
@@ -1207,14 +1208,64 @@ app.put("/api/profile/theme", requireAuth, async (req, res, next) => {
     const profileRef = database.ref(`users/${req.user.uid}/profile`);
     const existingSnap = await profileRef.get();
     const existing = existingSnap.val() || {};
+    const nextPersonalization = existing.personalization && typeof existing.personalization === "object"
+      ? {
+          ...existing.personalization,
+          themeId: cleanTheme.themeId,
+          ...(cleanTheme.customColors ? { customColors: cleanTheme.customColors } : { customColors: null }),
+          ...(cleanTheme.accentColor ? { accentColor: cleanTheme.accentColor } : { accentColor: null }),
+          updatedAt: now
+        }
+      : undefined;
     const saved = {
       ...existing,
       themePreference: cleanTheme,
+      ...(nextPersonalization ? { personalization: nextPersonalization } : {}),
       updatedAt: now,
       createdAt: existing.createdAt || now
     };
     await profileRef.set(saved);
     res.json({ themePreference: cleanTheme });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/profile/personalization", requireAuth, async (req, res, next) => {
+  try {
+    const profileSnap = await database.ref(`users/${req.user.uid}/profile`).get();
+    const profile = profileSnap.val() || {};
+    res.json({
+      personalization: profile.personalization || null,
+      themePreference: profile.themePreference || null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/profile/personalization", requireAuth, async (req, res, next) => {
+  try {
+    const clean = validatePersonalizationPreference(req.body);
+    const now = Date.now();
+    const profileRef = database.ref(`users/${req.user.uid}/profile`);
+    const existingSnap = await profileRef.get();
+    const existing = existingSnap.val() || {};
+    const themeSummary = {
+      themeId: clean.themeId,
+      ...(clean.customColors ? { customColors: clean.customColors } : {}),
+      ...(clean.accentColor ? { accentColor: clean.accentColor } : {}),
+      updatedAt: now
+    };
+    const saved = {
+      ...existing,
+      personalization: clean,
+      themePreference: themeSummary,
+      updatedAt: now,
+      createdAt: existing.createdAt || now
+    };
+    await profileRef.set(saved);
+    res.json({ personalization: clean, themePreference: themeSummary });
   } catch (error) {
     next(error);
   }
