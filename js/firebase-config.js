@@ -290,6 +290,92 @@ export async function updateStudentDisplayName(name) {
   }
 }
 
+export function getAuthStatus() {
+  return {
+    firebaseEnabled,
+    backendAuthMode,
+    currentUser: auth?.currentUser || null
+  };
+}
+
+export async function retryAuthConnection() {
+  return ensureFirebaseInitialized({ forceRetry: true });
+}
+
+function mapPasswordChangeError(error) {
+  const code = error?.code || "";
+  if (code === "auth/wrong-password" || code === "auth/invalid-credential" || code === "auth/invalid-login-credentials") {
+    return new Error("Your current password is incorrect. Please check and try again.");
+  }
+  if (code === "auth/weak-password") {
+    return new Error("Choose a stronger new password with at least 6 characters.");
+  }
+  if (code === "auth/requires-recent-login") {
+    return new Error("For your security, please sign out and sign back in before changing your password.");
+  }
+  if (code === "auth/too-many-requests") {
+    return new Error("Too many attempts. Wait a few minutes before trying again.");
+  }
+  return new Error(error?.message || "Unable to update your password. Please try again.");
+}
+
+export async function changeStudentPassword({ currentPassword, newPassword }) {
+  if (!currentPassword || typeof currentPassword !== "string") {
+    throw new Error("Enter your current password to continue.");
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 6) {
+    throw new Error("New password must be at least 6 characters.");
+  }
+  if (currentPassword === newPassword) {
+    throw new Error("Your new password must be different from your current password.");
+  }
+
+  await ensureFirebaseInitialized({ forceRetry: !firebaseEnabled && backendAuthMode !== "in-memory" });
+
+  if (firebaseEnabled && fbAuthMod) {
+    const user = auth?.currentUser;
+    if (!user || !user.email) {
+      throw new Error("Sign in again with your email and password before updating your password.");
+    }
+    try {
+      const credential = fbAuthMod.EmailAuthProvider.credential(user.email, currentPassword);
+      await fbAuthMod.reauthenticateWithCredential(user, credential);
+      await fbAuthMod.updatePassword(user, newPassword);
+      return { ok: true };
+    } catch (error) {
+      throw mapPasswordChangeError(error);
+    }
+  }
+
+  if (backendAuthMode !== "in-memory") {
+    throw new Error(
+      backendAuthMode === "firebase"
+        ? "Firebase Authentication is unavailable right now. Please try again shortly."
+        : "Could not reach the authentication server. Wait a moment and try again."
+    );
+  }
+
+  const user = auth?.currentUser;
+  if (!user) {
+    throw new Error("Sign in again before updating your password.");
+  }
+  const token = await user.getIdToken();
+  const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/api/local-auth/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw mapPasswordChangeError(Object.assign(new Error(data.error || "Unable to update password."), { code: data.code }));
+  }
+  return { ok: true };
+}
+
 export async function signOutUser() {
   if (firebaseEnabled && fbAuthMod) {
     return fbAuthMod.signOut(auth);

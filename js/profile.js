@@ -14,7 +14,7 @@ function escapeHtml(value = "") {
 
 export async function renderProfileModule(container, options = {}) {
   if (!container) return null;
-  const { onProfileLoaded, onProfileUpdated } = options;
+  const { onProfileLoaded, onProfileUpdated, onProfileError } = options;
 
   container.innerHTML = `
     <div class="view-card">
@@ -26,6 +26,13 @@ export async function renderProfileModule(container, options = {}) {
   try {
     data = await apiRequest("/api/me");
   } catch (err) {
+    if (typeof onProfileError === "function") {
+      try {
+        onProfileError(err);
+      } catch {
+        // Non-fatal UI listener failure
+      }
+    }
     container.innerHTML = `
       <div class="view-card">
         <div class="error-box" role="alert">${escapeHtml(err?.message || "Failed to load profile.")}</div>

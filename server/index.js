@@ -300,6 +300,25 @@ app.post("/api/local-auth/login", async (req, res, next) => {
   }
 });
 
+app.post("/api/local-auth/change-password", requireAuth, async (req, res, next) => {
+  try {
+    if (!usingMockFirebase) {
+      return res.status(400).json({ error: "Use Firebase Authentication to update your password." });
+    }
+    const result = await firebaseAuth.changeUserPassword({
+      uid: req.user.uid,
+      currentPassword: req.body?.currentPassword,
+      newPassword: req.body?.newPassword
+    });
+    res.json(result);
+  } catch (error) {
+    if (error.code) {
+      return res.status(error.statusCode || 400).json({ error: error.message, code: error.code });
+    }
+    next(error);
+  }
+});
+
 async function getProfileSnapshot(uid) {
   const snap = await database.ref(`users/${uid}/profile`).get();
   return snap.val() || {};

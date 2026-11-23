@@ -328,6 +328,29 @@ function createMockAuth(database) {
       };
     },
 
+    async changeUserPassword({ uid, currentPassword, newPassword }) {
+      const accountRef = database.ref(`localAuth/accounts/${uid}`);
+      const snap = await accountRef.get();
+      if (!snap.exists()) {
+        throw Object.assign(new Error("Student account not found."), { code: "auth/user-not-found", statusCode: 404 });
+      }
+      const account = snap.val();
+      if (!currentPassword || !verifyPassword(currentPassword, account.passwordHash)) {
+        throw Object.assign(new Error("Current password is incorrect."), { code: "auth/wrong-password", statusCode: 400 });
+      }
+      if (typeof newPassword !== "string" || newPassword.length < 6) {
+        throw Object.assign(new Error("Choose a stronger new password with at least 6 characters."), { code: "auth/weak-password", statusCode: 400 });
+      }
+      if (currentPassword === newPassword) {
+        throw Object.assign(new Error("Your new password must be different from your current password."), { code: "auth/invalid-password", statusCode: 400 });
+      }
+      await accountRef.update({
+        passwordHash: hashPassword(newPassword),
+        updatedAt: Date.now()
+      });
+      return { ok: true };
+    },
+
     async verifyIdToken(token) {
       const local = verifyLocalToken(token);
       if (local) {

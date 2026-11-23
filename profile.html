@@ -39,7 +39,7 @@
         <div>
           <p class="eyebrow">Account overview</p>
           <h2 id="account-settings-heading" style="margin:0;">Account Settings</h2>
-          <p class="muted" style="margin:4px 0 0;">Review your linked AFITStudentLife credentials and manage your active session.</p>
+          <p class="muted" style="margin:4px 0 0;">Review your linked AFITStudentLife credentials, change your password, and manage your active session.</p>
         </div>
         <div class="inline-actions" style="margin-top:0;">
           <button type="button" class="button button-quiet button-small" id="refresh-account-btn">Refresh Profile Data</button>
@@ -47,9 +47,33 @@
         </div>
       </div>
       <div id="account-settings-body" class="view-field-group">
-        <p class="muted">Loading account details…</p>
+        <p class="muted">Checking active session…</p>
       </div>
       <div id="account-settings-status" role="status" aria-live="polite"></div>
+
+      <div class="account-password-card">
+        <div>
+          <h3 style="margin:0 0 4px;">Change Password</h3>
+          <p class="muted" style="margin:0;">Re-enter your current password to verify your identity before setting a new password.</p>
+        </div>
+        <form id="password-change-form" class="tool-form" novalidate>
+          <div class="account-password-grid">
+            <label class="field" for="current-password-input">Current Password
+              <input id="current-password-input" name="currentPassword" type="password" autocomplete="current-password" required placeholder="Enter current password">
+            </label>
+            <label class="field" for="new-password-input">New Password
+              <input id="new-password-input" name="newPassword" type="password" autocomplete="new-password" minlength="6" required placeholder="At least 6 characters">
+            </label>
+            <label class="field" for="confirm-password-input">Confirm New Password
+              <input id="confirm-password-input" name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required placeholder="Re-enter new password">
+            </label>
+          </div>
+          <div id="password-change-status" role="status" aria-live="polite"></div>
+          <div class="inline-actions" style="margin-top:4px;">
+            <button type="submit" class="button button-primary button-small" id="change-password-btn">Update Password</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <section id="themes" class="dashboard-section settings-panel theme-studio-section" data-settings-section="themes" aria-labelledby="appearance-themes-heading"></section>
@@ -59,24 +83,51 @@
         <div>
           <p class="eyebrow">Safety &amp; access control</p>
           <h2 id="security-privacy-heading" style="margin:0;">Security &amp; Privacy</h2>
-          <p class="muted" style="margin:4px 0 0;">Control student discoverability, messaging safety, and session protection.</p>
+          <p class="muted" style="margin:4px 0 0;">Control student discoverability, blocked peers, and session protection.</p>
+        </div>
+        <div class="inline-actions" style="margin-top:0;">
+          <button type="button" class="button button-quiet button-small" id="refresh-security-btn">Refresh Privacy Controls</button>
         </div>
       </div>
       <div id="security-privacy-body" class="settings-security-grid">
         <article class="settings-info-tile">
-          <h3>Authentication &amp; Session</h3>
-          <p class="muted">Your account uses verified Firebase Authentication tokens. Sign out whenever using a shared lab or library computer.</p>
-          <span class="badge badge-success" id="security-auth-badge">Protected session active</span>
+          <div class="settings-tile-top">
+            <h3>Authentication &amp; Session</h3>
+            <p class="muted" id="security-session-summary">Checking authentication mode and active token status…</p>
+          </div>
+          <div class="settings-tile-actions">
+            <span class="badge badge-success" id="security-auth-badge">Checking session…</span>
+          </div>
         </article>
-        <article class="settings-info-tile">
-          <h3>Blocked Students &amp; Messaging</h3>
-          <p class="muted">Review or unblock students you have blocked inside AFITStudentLife Messaging.</p>
-          <a href="./messages.html" class="button button-outline button-small">Open Messaging Privacy</a>
+
+        <article class="settings-info-tile" id="coursemate-privacy-card">
+          <div class="settings-tile-top">
+            <h3>CourseMate Visibility</h3>
+            <p class="muted">Choose whether classmates taking your registered courses can find you in CourseMate discovery.</p>
+            <label class="settings-toggle-row" for="settings-coursemate-discoverable">
+              <input type="checkbox" id="settings-coursemate-discoverable" class="settings-switch-input" disabled>
+              <span class="settings-switch-track" aria-hidden="true"></span>
+              <span class="settings-toggle-text" id="settings-coursemate-label">Loading visibility setting…</span>
+            </label>
+            <div id="coursemate-privacy-status" role="status" aria-live="polite"></div>
+          </div>
+          <div class="settings-tile-actions">
+            <a href="./coursemate.html" class="button button-quiet button-small">Open CourseMate</a>
+          </div>
         </article>
-        <article class="settings-info-tile">
-          <h3>CourseMate Visibility</h3>
-          <p class="muted">Choose whether classmates taking the same registered courses can discover and connect with you.</p>
-          <a href="./coursemate.html" class="button button-outline button-small">Manage CourseMate Privacy</a>
+
+        <article class="settings-info-tile settings-info-tile-wide" id="blocked-students-card">
+          <div class="settings-tile-top">
+            <h3>Blocked Students &amp; Messaging</h3>
+            <p class="muted">Review or unblock students you have blocked inside AFITStudentLife Messaging.</p>
+            <div id="settings-blocked-list" class="blocked-students-list">
+              <p class="muted">Loading blocked students…</p>
+            </div>
+            <div id="blocked-students-status" role="status" aria-live="polite"></div>
+          </div>
+          <div class="settings-tile-actions">
+            <a href="./messages.html" class="button button-quiet button-small">Open Messages</a>
+          </div>
         </article>
       </div>
     </section>

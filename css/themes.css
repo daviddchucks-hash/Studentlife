@@ -108,18 +108,34 @@ html[data-theme="multicolour-pop"] .messages-tab.active {
 
 .settings-security-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
 }
 
 .settings-info-tile {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   align-content: space-between;
   padding: 16px;
   border: 1px solid var(--border-color);
   border-radius: 11px;
   background: var(--surface-secondary);
+}
+
+.settings-info-tile-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-tile-top {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .settings-info-tile h3 {
@@ -129,6 +145,118 @@ html[data-theme="multicolour-pop"] .messages-tab.active {
 
 .settings-info-tile p {
   margin: 0;
+}
+
+.account-password-card {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-secondary);
+  display: grid;
+  gap: 14px;
+}
+
+.account-password-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--card-background);
+  cursor: pointer;
+}
+
+.settings-switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  pointer-events: none;
+}
+
+.settings-switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--border-color);
+  border: 1px solid var(--theme-border-strong);
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.settings-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--card-background);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.16s ease;
+}
+
+.settings-switch-input:checked + .settings-switch-track {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.settings-switch-input:checked + .settings-switch-track::after {
+  transform: translateX(18px);
+}
+
+.settings-switch-input:focus-visible + .settings-switch-track {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.settings-switch-input:disabled + .settings-switch-track {
+  opacity: 0.5;
+}
+
+.settings-toggle-text {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.blocked-students-list {
+  display: grid;
+  gap: 8px;
+}
+
+.blocked-student-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--card-background);
+}
+
+.blocked-student-meta strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.blocked-student-meta small {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* System Default Appearance Card */
