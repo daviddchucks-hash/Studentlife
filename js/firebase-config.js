@@ -95,13 +95,17 @@ function bindQueuedFirebaseSubscribers() {
   }
 }
 
+let lastInitError = null;
+
 async function initializeFirebaseClient() {
   if (typeof window === "undefined") return false;
   if (firebaseEnabled && fbAuthMod) return true;
 
+  lastInitError = null;
   const cfg = await fetchBackendConfig();
   if (!cfg) {
     backendAuthMode = "unknown";
+    lastInitError = new Error("Could not reach the authentication server. Wait a moment and try again.");
     return false;
   }
 
@@ -109,19 +113,25 @@ async function initializeFirebaseClient() {
 
   if (cfg.firebaseEnabled && cfg.firebaseConfig?.apiKey) {
     firebaseConfig = cfg.firebaseConfig;
-    const [fbApp, fbAuth, fbDb] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js"),
-      import("https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js")
-    ]);
-    fbAuthMod = fbAuth;
-    fbDbMod = fbDb;
-    app = fbApp.getApps?.().length ? fbApp.getApp() : fbApp.initializeApp(firebaseConfig);
-    auth = fbAuth.getAuth(app);
-    database = fbDb.getDatabase(app);
-    firebaseEnabled = true;
-    bindQueuedFirebaseSubscribers();
-    return true;
+    try {
+      const [fbApp, fbAuth, fbDb] = await Promise.all([
+        import("https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js"),
+        import("https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js"),
+        import("https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js")
+      ]);
+      fbAuthMod = fbAuth;
+      fbDbMod = fbDb;
+      app = fbApp.getApps?.().length ? fbApp.getApp() : fbApp.initializeApp(firebaseConfig);
+      auth = fbAuth.getAuth(app);
+      database = fbDb.getDatabase(app);
+      firebaseEnabled = true;
+      bindQueuedFirebaseSubscribers();
+      return true;
+    } catch (err) {
+      firebaseEnabled = false;
+      lastInitError = err instanceof Error ? err : new Error("Failed to load Firebase authentication SDK.");
+      return false;
+    }
   }
 
   if (backendAuthMode === "in-memory") {
@@ -129,7 +139,10 @@ async function initializeFirebaseClient() {
     auth = {
       currentUser: makeLocalUser(initialSession)
     };
+    return false;
   }
+
+  lastInitError = new Error("Firebase Web configuration is unavailable on the server.");
   return false;
 }
 
@@ -145,7 +158,7 @@ export async function ensureFirebaseInitialized({ forceRetry = false } = {}) {
 }
 
 if (typeof window !== "undefined") {
-  await ensureFirebaseInitialized();
+  void ensureFirebaseInitialized();
 }
 
 export { app, auth, database, firebaseConfig, firebaseEnabled };
@@ -188,9 +201,18 @@ export function watchAuthState(callback, errorCallback) {
       callback(current);
       return;
     }
+    if (typeof errorCallback === "function") {
+      errorCallback(lastInitError || new Error("Could not connect to the authentication service."));
+      return;
+    }
     callback(null);
-  }).catch(() => {
-    if (authSubscribers.has(token)) callback(null);
+  }).catch((err) => {
+    if (!authSubscribers.has(token)) return;
+    if (typeof errorCallback === "function") {
+      errorCallback(err instanceof Error ? err : new Error("Could not connect to the authentication service."));
+      return;
+    }
+    callback(null);
   });
 
   return () => {

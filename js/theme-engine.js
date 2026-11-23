@@ -16,6 +16,7 @@ const DEFAULT_CUSTOM_COLORS = {
 
 let syncedUid = "";
 let syncPromise = null;
+let localChangeSeq = 0;
 
 export function getThemes() {
   return getCore().THEMES;
@@ -63,6 +64,7 @@ function buildServerThemeBody(payload) {
 export async function saveAndApplyTheme(preference, uid = "") {
   const core = getCore();
   const effectiveUid = uid || core.getActiveUid();
+  localChangeSeq += 1;
   const payload = core.normalizePreference({
     ...preference,
     updatedAt: Date.now(),
@@ -104,6 +106,7 @@ export async function resetToDefaultTheme(uid = "") {
 }
 
 export function handleSignOutThemeReset() {
+  localChangeSeq += 1;
   syncedUid = "";
   syncPromise = null;
   getCore().clearActiveSessionTheme();
@@ -174,19 +177,24 @@ export async function syncStudentTheme(user, knownProfileTheme = null) {
 
   if (syncPromise) return syncPromise;
 
+  const seqAtStart = localChangeSeq;
   syncPromise = apiRequest("/api/me")
     .then((me) => {
+      const latestLocal = core.readStoredPreferenceForUid(uid);
+      if (seqAtStart !== localChangeSeq || latestLocal?.pendingSync) {
+        return latestLocal || core.getCurrentPreference();
+      }
       const serverTheme = me?.profile?.themePreference;
       const effective = serverTheme
         ? core.normalizePreference({ ...serverTheme, pendingSync: false })
-        : (localForUser || { themeId: core.DEFAULT_THEME_ID, customColors: null, pendingSync: false });
+        : (latestLocal || { themeId: core.DEFAULT_THEME_ID, customColors: null, pendingSync: false });
 
       core.saveStoredPreferenceForUid(uid, effective);
       core.applyTheme(effective, { animate: false });
       syncedUid = uid;
       return effective;
     })
-    .catch(() => localForUser || { themeId: core.DEFAULT_THEME_ID, customColors: null })
+    .catch(() => core.readStoredPreferenceForUid(uid) || localForUser || { themeId: core.DEFAULT_THEME_ID, customColors: null })
     .finally(() => {
       syncPromise = null;
     });

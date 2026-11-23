@@ -93,6 +93,10 @@ html[data-theme="multicolour-pop"] .messages-tab.active {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
+.settings-panel[hidden] {
+  display: none !important;
+}
+
 .settings-panel + .settings-panel {
   margin-top: 22px;
 }

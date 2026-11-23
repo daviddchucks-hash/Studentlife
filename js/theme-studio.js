@@ -572,6 +572,10 @@ export function renderThemeStudio(container, options = {}) {
     container.querySelectorAll("[data-bg-preset]").forEach((btn) => {
       btn.addEventListener("click", () => {
         customDraft.backgroundPreset = btn.dataset.bgPreset || "light-crisp";
+        if (previewPref?.themeId === "custom") {
+          previewPref = { themeId: "custom", customColors: { ...customDraft } };
+          applyThemePreference(previewPref, { animate: false });
+        }
         render();
       });
     });
@@ -668,7 +672,7 @@ export function renderThemeStudio(container, options = {}) {
   return {
     updateFromAccount({ userUid: nextUid, preference }) {
       if (nextUid) userUid = nextUid;
-      if (preference && !previewPref) {
+      if (preference && !previewPref && !isSaving) {
         savedPref = preference;
         if (preference.customColors) {
           customDraft = { ...getDefaultCustomColors(), ...preference.customColors };

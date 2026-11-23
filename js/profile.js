@@ -268,6 +268,9 @@ export async function renderProfileModule(container, options = {}) {
   function renderEditMode() {
     const locked = isMatricLocked();
     const levelOptions = ["", "100", "200", "300", "400", "500", "Postgraduate"];
+    if (profileData.level && !levelOptions.includes(profileData.level)) {
+      levelOptions.push(profileData.level);
+    }
 
     container.innerHTML = `
       <div class="view-card">

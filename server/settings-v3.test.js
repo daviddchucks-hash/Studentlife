@@ -268,7 +268,12 @@ test("Settings V3 Frontend Contracts: No static link-only privacy placeholders, 
   assert.ok(pageProfileJs.includes("pushState"));
   assert.ok(pageProfileJs.includes("popstate"));
   assert.ok(pageProfileJs.includes("onProfileError"));
+  assert.ok(pageProfileJs.includes("document.readyState"));
+  assert.ok(pageProfileJs.includes("panel.style.display"));
   assert.ok(profileJs.includes("onProfileError"));
+
+  // Non-blocking Firebase client init so Settings tabs and Theme Studio never freeze on cold-start
+  assert.ok(!firebaseConfigJs.includes("await ensureFirebaseInitialized();"), "firebase-config.js must not block module evaluation with top-level await");
 
   // Firebase Auth real reauthentication + updatePassword present
   assert.ok(firebaseConfigJs.includes("reauthenticateWithCredential"));

@@ -14,6 +14,7 @@ function waitForInitialAuthState() {
         if (settled) return;
         settled = true;
         unsubscribe();
+        if (!user) initialAuthState = null;
         resolve(user);
       };
 

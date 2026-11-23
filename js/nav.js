@@ -79,5 +79,9 @@ export function initNavigation(activePage = "") {
     }
 
     void syncStudentTheme(user);
+  }, () => {
+    if (nameLabel) {
+      nameLabel.textContent = "Offline";
+    }
   });
 }
